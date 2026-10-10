@@ -1,0 +1,27 @@
+package laseta.bac.registry;
+
+import java.util.function.Supplier;
+
+import laseta.bac.BetterAutoCrafter;
+import laseta.bac.block.entity.BetterAutoCrafterBlockEntity;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.world.level.block.entity.BlockEntityType;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.neoforge.registries.DeferredRegister;
+
+public final class ModBlockEntities {
+    public static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITIES =
+            DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, BetterAutoCrafter.MODID);
+
+    public static final Supplier<BlockEntityType<BetterAutoCrafterBlockEntity>> BETTER_AUTO_CRAFTER =
+            BLOCK_ENTITIES.register("better_auto_crafter", () -> BlockEntityType.Builder
+                    .of(BetterAutoCrafterBlockEntity::new, ModBlocks.BETTER_AUTO_CRAFTER.get())
+                    .build(null));
+
+    private ModBlockEntities() {
+    }
+
+    public static void register(IEventBus modEventBus) {
+        BLOCK_ENTITIES.register(modEventBus);
+    }
+}
