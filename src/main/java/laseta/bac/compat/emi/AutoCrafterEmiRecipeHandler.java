@@ -17,6 +17,7 @@ import laseta.bac.block.entity.BetterAutoCrafterBlockEntity;
 import laseta.bac.compat.RecipeFillHelper;
 import laseta.bac.menu.BetterAutoCrafterMenu;
 import laseta.bac.menu.slot.ResultPreviewSlot;
+import laseta.bac.menu.slot.UpgradeSlot;
 import laseta.bac.menu.transfer.GridFillPlanner;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
@@ -40,7 +41,7 @@ public class AutoCrafterEmiRecipeHandler implements EmiRecipeHandler<BetterAutoC
         // Everything the grid can be filled from: the grid itself and the player's inventory.
         List<EmiStack> stacks = new ArrayList<>();
         for (Slot slot : screen.getMenu().slots) {
-            if (!(slot instanceof ResultPreviewSlot) && slot.hasItem()) {
+            if (!(slot instanceof ResultPreviewSlot) && !(slot instanceof UpgradeSlot) && slot.hasItem()) {
                 stacks.add(EmiStack.of(slot.getItem()));
             }
         }

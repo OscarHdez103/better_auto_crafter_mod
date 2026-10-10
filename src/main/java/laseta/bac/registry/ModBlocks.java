@@ -2,6 +2,7 @@ package laseta.bac.registry;
 
 import laseta.bac.BetterAutoCrafter;
 import laseta.bac.block.BetterAutoCrafterBlock;
+import laseta.bac.block.TranslocatorBlock;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.properties.NoteBlockInstrument;
@@ -21,6 +22,15 @@ public final class ModBlocks {
                     .instrument(NoteBlockInstrument.BASS)
                     .strength(2.5F)
                     .sound(SoundType.WOOD));
+
+    public static final DeferredBlock<TranslocatorBlock> TRANSLOCATOR = BLOCKS.registerBlock(
+            "translocator",
+            TranslocatorBlock::new,
+            BlockBehaviour.Properties.of()
+                    .mapColor(MapColor.METAL)
+                    .requiresCorrectToolForDrops()
+                    .strength(3.5F)
+                    .sound(SoundType.LODESTONE));
 
     private ModBlocks() {
     }

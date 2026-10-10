@@ -1,0 +1,21 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "pattern": [
+    "UUU",
+    "UCU",
+    "UUU"
+  ],
+  "key": {
+    "U": {
+      "item": "better_auto_crafter:stocking_upgrade_tier_2"
+    },
+    "C": {
+      "item": "minecraft:crafting_table"
+    }
+  },
+  "result": {
+    "id": "better_auto_crafter:stocking_upgrade_tier_3",
+    "count": 1
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "better_auto_crafter:block/translocator"
+    },
+    "facing=east": {
+      "model": "better_auto_crafter:block/translocator",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "better_auto_crafter:block/translocator",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "better_auto_crafter:block/translocator",
+      "y": 270
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "parent": "minecraft:block/cube",
+  "textures": {
+    "particle": "better_auto_crafter:block/translocator_side",
+    "north": "better_auto_crafter:block/translocator_front",
+    "south": "better_auto_crafter:block/translocator_side",
+    "east": "better_auto_crafter:block/translocator_side",
+    "west": "better_auto_crafter:block/translocator_side",
+    "up": "better_auto_crafter:block/translocator_top",
+    "down": "better_auto_crafter:block/translocator_side"
+  }
+}

@@ -5,11 +5,16 @@ import laseta.bac.crafting.CraftingSettings;
 import laseta.bac.crafting.RedstoneMode;
 import laseta.bac.crafting.TransferPriority;
 import laseta.bac.menu.slot.ResultPreviewSlot;
+import laseta.bac.menu.slot.UpgradeSlot;
 import laseta.bac.menu.transfer.GridFillPlanner;
 import laseta.bac.registry.ModBlocks;
 import laseta.bac.registry.ModMenuTypes;
 import laseta.bac.sideconfig.RelativeSide;
 import laseta.bac.sideconfig.SideMode;
+import laseta.bac.upgrade.UpgradeInventory;
+import laseta.bac.upgrade.UpgradeLayout;
+import laseta.bac.upgrade.UpgradeSlotType;
+import laseta.bac.upgrade.UpgradeStatus;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.world.SimpleContainer;
@@ -39,6 +44,9 @@ public class BetterAutoCrafterMenu extends AbstractContainerMenu {
     private static final int RESULT_SLOT = GRID_END;
     private static final int PLAYER_INV_START = RESULT_SLOT + 1;
     private static final int PLAYER_INV_END = PLAYER_INV_START + 36; // exclusive
+    // Upgrade slots come last so the indices above never change (recipe viewers rely on them).
+    private static final int UPGRADES_START = PLAYER_INV_END;
+    private static final int UPGRADES_END = UPGRADES_START + UpgradeSlotType.COUNT; // exclusive
 
     // Menu button ids (sent with vanilla's ServerboundContainerButtonClickPacket):
     // [0, 6) next mode, [6, 12) previous mode, [12, 18) reset to NONE. Offset by RelativeSide ordinal.
@@ -65,34 +73,47 @@ public class BetterAutoCrafterMenu extends AbstractContainerMenu {
     private final ContainerData sideModes;
     /** CraftingSettings values (see CraftingSettings.DATA_*). Backed by the block entity on the server. */
     private final ContainerData settings;
+    /** UpgradeStatus per upgrade slot, computed by the block entity on the server. */
+    private final ContainerData upgradeStatus;
+    /** Client only: set by the screen while the upgrades tab is open, which shows the upgrade slots. */
+    private boolean upgradeSlotsVisible;
 
     /** Client-side constructor (called by the MenuType with the data written in {@code openMenu}). */
     public BetterAutoCrafterMenu(int containerId, Inventory playerInventory, RegistryFriendlyByteBuf extraData) {
         this(containerId, playerInventory, new ItemStackHandler(BetterAutoCrafterBlockEntity.GRID_SIZE),
+                new UpgradeInventory(() -> {
+                }),
                 new SimpleContainerData(RelativeSide.COUNT), new SimpleContainerData(CraftingSettings.DATA_COUNT),
-                extraData.readBlockPos(), ContainerLevelAccess.NULL, null);
+                new SimpleContainerData(UpgradeSlotType.COUNT), extraData.readBlockPos(), ContainerLevelAccess.NULL, null);
     }
 
     /** Server-side constructor (called by the block entity). */
     public BetterAutoCrafterMenu(int containerId, Inventory playerInventory, BetterAutoCrafterBlockEntity blockEntity) {
-        this(containerId, playerInventory, blockEntity.getInventory(), blockEntity.getSideConfig().asContainerData(),
-                blockEntity.getCraftingSettings().asContainerData(), blockEntity.getBlockPos(),
+        this(containerId, playerInventory, blockEntity.getInventory(), blockEntity.getUpgrades(),
+                blockEntity.getSideConfig().asContainerData(), blockEntity.getCraftingSettings().asContainerData(),
+                blockEntity.getUpgradeStatusData(), blockEntity.getBlockPos(),
                 ContainerLevelAccess.create(Objects.requireNonNull(blockEntity.getLevel()), blockEntity.getBlockPos()), blockEntity);
     }
 
-    private BetterAutoCrafterMenu(int containerId, Inventory playerInventory, IItemHandler grid, ContainerData sideModes,
-                                  ContainerData settings, BlockPos blockPos, ContainerLevelAccess access,
+    private BetterAutoCrafterMenu(int containerId, Inventory playerInventory, IItemHandler grid, IItemHandler upgrades,
+                                  ContainerData sideModes, ContainerData settings, ContainerData upgradeStatus,
+                                  BlockPos blockPos, ContainerLevelAccess access,
                                   @Nullable BetterAutoCrafterBlockEntity blockEntity) {
         super(ModMenuTypes.BETTER_AUTO_CRAFTER.get(), containerId);
         checkContainerDataCount(sideModes, RelativeSide.COUNT);
         checkContainerDataCount(settings, CraftingSettings.DATA_COUNT);
+        checkContainerDataCount(upgradeStatus, UpgradeSlotType.COUNT);
         this.access = access;
         this.blockEntity = blockEntity;
         this.blockPos = blockPos;
         this.sideModes = sideModes;
         this.settings = settings;
+        this.upgradeStatus = upgradeStatus;
+        // The server has no screen: there the slots are always "visible" (it doesn't use positions anyway).
+        this.upgradeSlotsVisible = blockEntity != null;
         addDataSlots(sideModes);
         addDataSlots(settings);
+        addDataSlots(upgradeStatus);
 
         // 3x3 input grid
         for (int row = 0; row < 3; row++) {
@@ -114,6 +135,24 @@ public class BetterAutoCrafterMenu extends AbstractContainerMenu {
         for (int col = 0; col < 9; col++) {
             addSlot(new Slot(playerInventory, col, 8 + col * 18, 142));
         }
+
+        // Upgrade slots, in the upgrades tab on the left of the GUI
+        for (UpgradeSlotType type : UpgradeSlotType.values()) {
+            addSlot(new UpgradeSlot(upgrades, type, UpgradeLayout.slotX(type.ordinal()), UpgradeLayout.slotY(type.ordinal()),
+                    () -> upgradeSlotsVisible));
+        }
+    }
+
+    public void setUpgradeSlotsVisible(boolean visible) {
+        this.upgradeSlotsVisible = visible;
+    }
+
+    public UpgradeStatus getUpgradeStatus(UpgradeSlotType type) {
+        return UpgradeStatus.byId(upgradeStatus.get(type.ordinal()));
+    }
+
+    public Slot getUpgradeSlot(UpgradeSlotType type) {
+        return slots.get(UPGRADES_START + type.ordinal());
     }
 
     public BlockPos getBlockPos() {
@@ -257,14 +296,25 @@ public class BetterAutoCrafterMenu extends AbstractContainerMenu {
         ItemStack stack = slot.getItem();
         ItemStack original = stack.copy();
 
-        if (index < GRID_END) {
-            // Grid -> player inventory
+        if (index < GRID_END || index >= UPGRADES_START) {
+            // Grid or upgrade -> player inventory
             if (!moveItemStackTo(stack, PLAYER_INV_START, PLAYER_INV_END, true)) {
                 return ItemStack.EMPTY;
             }
-        } else if (!moveItemStackTo(stack, GRID_START, GRID_END, false)) {
-            // Player inventory -> grid
-            return ItemStack.EMPTY;
+        } else {
+            // Player inventory -> one item into its upgrade slot if it's an upgrade and there is room, otherwise -> grid
+            if (moveOneToUpgrades(stack)) {
+                if (stack.isEmpty()) {
+                    slot.setByPlayer(ItemStack.EMPTY);
+                } else {
+                    slot.setChanged();
+                }
+                // EMPTY stops vanilla's quick-move loop, so each shift-click installs exactly one upgrade.
+                return ItemStack.EMPTY;
+            }
+            if (!moveItemStackTo(stack, GRID_START, GRID_END, false)) {
+                return ItemStack.EMPTY;
+            }
         }
 
         if (stack.isEmpty()) {
@@ -278,6 +328,20 @@ public class BetterAutoCrafterMenu extends AbstractContainerMenu {
         }
         slot.onTake(player, stack);
         return original;
+    }
+
+
+    /** Moves a single item of {@code stack} into the upgrade slot that accepts it, if there is room. */
+    private boolean moveOneToUpgrades(ItemStack stack) {
+        if (UpgradeSlotType.forStack(stack) == null) {
+            return false;
+        }
+        ItemStack one = stack.copyWithCount(1);
+        if (!moveItemStackTo(one, UPGRADES_START, UPGRADES_END, false)) {
+            return false;
+        }
+        stack.shrink(1);
+        return true;
     }
 
     @Override

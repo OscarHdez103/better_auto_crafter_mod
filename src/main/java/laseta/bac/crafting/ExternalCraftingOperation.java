@@ -36,6 +36,12 @@ import org.slf4j.Logger;
  * hoppers and item pipes use, so any modded inventory that pipes can use (drawers and controllers, AE2,
  * Refined Storage, machines, ...) works.</p>
  *
+ * <p>The input and output faces each belong to a {@link CraftingAnchor}: normally the crafter itself, or a
+ * Translocator when a translocation upgrade moves them there (possibly to another dimension).</p>
+ *
+ * <p>With a stock limit (stocking upgrades), an output inventory that already holds that many of the result
+ * doesn't receive it; if every output inventory is stocked, nothing is crafted.</p>
+ *
  * <p>Order of operations, so items are never lost or duplicated:</p>
  * <ol>
  *     <li>Plan: find every ingredient with simulated extractions, counting what was already reserved per slot.</li>
@@ -65,26 +71,35 @@ public final class ExternalCraftingOperation {
     private final CraftingSettings settings;
     private final List<IItemHandler> inputs;
     private final List<IItemHandler> outputs;
+    private final int stockLimit;
 
-    private ExternalCraftingOperation(ServerLevel level, BlockPos pos, Direction facing, SideConfiguration sides,
-                                      CraftingSettings settings) {
+    private ExternalCraftingOperation(ServerLevel level, BlockPos pos, CraftingAnchor inputAnchor, CraftingAnchor outputAnchor,
+                                      SideConfiguration sides, CraftingSettings settings, int stockLimit) {
         this.level = level;
         this.pos = pos;
         this.settings = settings;
-        this.inputs = handlersInOrder(findNeighbours(level, pos, facing, sides, SideMode::canInput),
+        this.stockLimit = stockLimit;
+        this.inputs = handlersInOrder(findNeighbours(inputAnchor, sides, SideMode::canInput),
                 settings.getInputPriority(), settings.getInputCursor());
-        this.outputs = handlersInOrder(findNeighbours(level, pos, facing, sides, SideMode::canOutput),
+        this.outputs = handlersInOrder(findNeighbours(outputAnchor, sides, SideMode::canOutput),
                 settings.getOutputPriority(), settings.getOutputCursor());
     }
 
     /**
      * Tries to craft {@code recipe} once, as laid out by {@code template} (the 9 grid stacks).
      *
+     * @param level        the crafter's level (recipes are matched and leftovers dropped there)
+     * @param pos          the crafter's position
+     * @param inputAnchor  where the input faces are: the crafter itself, or a Translocator (pull upgrade)
+     * @param outputAnchor where the output faces are: the crafter itself, or a Translocator (push upgrade)
+     * @param stockLimit   output inventories holding at least this many of the result don't receive it; 0 = no limit
      * @return true if the craft happened
      */
-    public static boolean tryCraft(ServerLevel level, BlockPos pos, Direction facing, SideConfiguration sides,
-                                   CraftingSettings settings, List<ItemStack> template, CraftingRecipe recipe) {
-        boolean crafted = new ExternalCraftingOperation(level, pos, facing, sides, settings).craft(template, recipe);
+    public static boolean tryCraft(ServerLevel level, BlockPos pos, CraftingAnchor inputAnchor, CraftingAnchor outputAnchor,
+                                   SideConfiguration sides, CraftingSettings settings, int stockLimit,
+                                   List<ItemStack> template, CraftingRecipe recipe) {
+        boolean crafted = new ExternalCraftingOperation(level, pos, inputAnchor, outputAnchor, sides, settings, stockLimit)
+                .craft(template, recipe);
         if (crafted) {
             settings.advanceRoundRobin();
         }
@@ -132,13 +147,14 @@ public final class ExternalCraftingOperation {
             }
         }
 
-        // 3. There must be room for everything that comes out.
-        IItemHandler resultTarget = findOutputFor(result);
+        // 3. There must be room for everything that comes out (the result only where it isn't stocked yet).
+        List<IItemHandler> resultOutputs = unstockedOutputs(result);
+        IItemHandler resultTarget = findOutputFor(result, resultOutputs);
         if (resultTarget == null) {
             return false;
         }
         for (ItemStack remainder : remainders) {
-            if (findOutputFor(remainder) == null) {
+            if (findOutputFor(remainder, outputs) == null) {
                 return false;
             }
         }
@@ -158,9 +174,9 @@ public final class ExternalCraftingOperation {
 
         // 5. Deliver.
         result.onCraftedBySystem(level);
-        deliver(result, resultTarget);
+        deliver(result, resultTarget, resultOutputs);
         for (ItemStack remainder : remainders) {
-            deliver(remainder, findOutputFor(remainder));
+            deliver(remainder, findOutputFor(remainder, outputs), outputs);
         }
         return true;
     }
@@ -206,10 +222,30 @@ public final class ExternalCraftingOperation {
         return exact ? ItemStack.isSameItemSameComponents(wanted, candidate) : ItemStack.isSameItem(wanted, candidate);
     }
 
-    /** First output inventory (in priority order) that accepts the whole stack. */
+    /** The output inventories that hold fewer of {@code result} than the stock limit (all of them without a limit). */
+    private List<IItemHandler> unstockedOutputs(ItemStack result) {
+        if (stockLimit <= 0) {
+            return outputs;
+        }
+        return outputs.stream().filter(handler -> countStock(handler, result) < stockLimit).toList();
+    }
+
+    /** How many of {@code stack} (same item and data) the inventory holds, counting no further than the stock limit. */
+    private int countStock(IItemHandler handler, ItemStack stack) {
+        int count = 0;
+        for (int slot = 0; slot < handler.getSlots() && count < stockLimit; slot++) {
+            ItemStack inSlot = handler.getStackInSlot(slot);
+            if (ItemStack.isSameItemSameComponents(inSlot, stack)) {
+                count += inSlot.getCount();
+            }
+        }
+        return count;
+    }
+
+    /** First of {@code targets} (in priority order) that accepts the whole stack. */
     @Nullable
-    private IItemHandler findOutputFor(ItemStack stack) {
-        for (IItemHandler handler : outputs) {
+    private static IItemHandler findOutputFor(ItemStack stack, List<IItemHandler> targets) {
+        for (IItemHandler handler : targets) {
             if (ItemHandlerHelper.insertItemStacked(handler, stack.copy(), true).isEmpty()) {
                 return handler;
             }
@@ -221,12 +257,12 @@ public final class ExternalCraftingOperation {
     // Moving items
     // ---------------------------------------------------------------------------------------------------------------
 
-    private void deliver(ItemStack stack, @Nullable IItemHandler preferred) {
+    private void deliver(ItemStack stack, @Nullable IItemHandler preferred, List<IItemHandler> targets) {
         ItemStack rest = stack.copy();
         if (preferred != null) {
             rest = ItemHandlerHelper.insertItemStacked(preferred, rest, false);
         }
-        for (IItemHandler handler : outputs) {
+        for (IItemHandler handler : targets) {
             if (rest.isEmpty()) {
                 return;
             }
@@ -277,16 +313,19 @@ public final class ExternalCraftingOperation {
         return Collections.unmodifiableList(handlers);
     }
 
-    /** Neighbouring item handlers on the faces accepted by {@code filter}, in {@link RelativeSide} order. */
-    private static List<Face> findNeighbours(ServerLevel level, BlockPos pos, Direction facing, SideConfiguration sides,
-                                             Predicate<SideMode> filter) {
+    /**
+     * Item handlers next to {@code anchor} on the faces accepted by {@code filter}, in {@link RelativeSide} order.
+     * Neighbours in unloaded chunks are skipped (never loaded), like hoppers and pipes do.
+     */
+    private static List<Face> findNeighbours(CraftingAnchor anchor, SideConfiguration sides, Predicate<SideMode> filter) {
+        ServerLevel level = anchor.level();
         List<Face> faces = new ArrayList<>();
         for (RelativeSide side : RelativeSide.values()) {
             if (!filter.test(sides.getMode(side))) {
                 continue;
             }
-            Direction direction = side.toDirection(facing);
-            BlockPos neighbourPos = pos.relative(direction);
+            Direction direction = side.toDirection(anchor.facing());
+            BlockPos neighbourPos = anchor.pos().relative(direction);
             if (!level.isLoaded(neighbourPos)) {
                 continue;
             }

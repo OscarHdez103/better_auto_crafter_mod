@@ -40,9 +40,17 @@ public abstract class SideTab {
     public record Hover(List<Component> lines, ScreenRectangle anchor) {
     }
 
+    /** Which edge of the GUI the tab hangs off. Left tabs grow to the left, right tabs to the right. */
+    public enum Side {
+        LEFT,
+        RIGHT
+    }
+
     public enum ClickResult {
         /** The click wasn't on this tab. */
         IGNORED,
+        /** The click was on this tab, but the screen should handle it (e.g. it's on a slot shown in the tab). */
+        PASS,
         /** The click was on this tab and has been handled (even if it did nothing). */
         CONSUMED,
         /** The header was clicked: the tab opened or closed. */
@@ -58,6 +66,8 @@ public abstract class SideTab {
     private boolean open;
     private float progress;
     private long lastFrameMillis = Util.getMillis();
+    private Side side = Side.RIGHT;
+    private int anchorX;
     protected int x;
     protected int y;
 
@@ -85,9 +95,20 @@ public abstract class SideTab {
         }
     }
 
-    public void setPosition(int x, int y) {
-        this.x = x;
+    /**
+     * @param anchorX the GUI edge the tab is attached to; the tab's left edge for right tabs, its right edge for
+     *                left tabs. Call again whenever the width changes (the group does this every frame).
+     */
+    public void setPosition(Side side, int anchorX, int y) {
+        this.side = side;
+        this.anchorX = anchorX;
+        this.x = side == Side.RIGHT ? anchorX : anchorX - currentWidth();
         this.y = y;
+    }
+
+    /** The GUI edge the tab is attached to (see {@link #setPosition}). */
+    protected int anchorX() {
+        return anchorX;
     }
 
     public void tickAnimation() {
@@ -123,7 +144,7 @@ public abstract class SideTab {
         return expandedWidth;
     }
 
-    protected boolean isFullyOpen() {
+    public boolean isFullyOpen() {
         return open && progress >= 1.0F;
     }
 
@@ -167,8 +188,12 @@ public abstract class SideTab {
     @Nullable
     protected abstract Hover getContentTooltip(int mouseX, int mouseY);
 
-    /** Handles a click in the content area. Only called while fully open. */
-    protected abstract void contentClicked(double mouseX, double mouseY, int button);
+    /**
+     * Handles a click in the content area. Only called while fully open.
+     *
+     * @return false to let the screen handle the click instead (e.g. a slot shown in the tab)
+     */
+    protected abstract boolean contentClicked(double mouseX, double mouseY, int button);
 
     /** Bevelled panel with rounded corners, same construction as vanilla's GUI panels. */
     private void drawPanel(GuiGraphics graphics, int x, int y, int width, int height) {
@@ -216,8 +241,7 @@ public abstract class SideTab {
             return ClickResult.IGNORED;
         }
         if (isFullyOpen() && mouseY >= y + HEADER_HEIGHT) {
-            contentClicked(mouseX, mouseY, button);
-            return ClickResult.CONSUMED;
+            return contentClicked(mouseX, mouseY, button) ? ClickResult.CONSUMED : ClickResult.PASS;
         }
         if (button == 0) {
             open = !open;

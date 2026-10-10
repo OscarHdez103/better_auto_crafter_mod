@@ -1,0 +1,32 @@
+{
+  "parent": "minecraft:recipes/root",
+  "criteria": {
+    "has_better_auto_crafter": {
+      "trigger": "minecraft:inventory_changed",
+      "conditions": {
+        "items": [
+          {
+            "items": "better_auto_crafter:better_auto_crafter"
+          }
+        ]
+      }
+    }
+  },
+  "requirements": [
+    [
+      "has_better_auto_crafter"
+    ]
+  ],
+  "rewards": {
+    "recipes": [
+      "better_auto_crafter:translocator",
+      "better_auto_crafter:translocation_upgrade_pull",
+      "better_auto_crafter:translocation_upgrade_push",
+      "better_auto_crafter:dimensional_translocation_upgrade_pull",
+      "better_auto_crafter:dimensional_translocation_upgrade_push",
+      "better_auto_crafter:stocking_upgrade",
+      "better_auto_crafter:stocking_upgrade_tier_2",
+      "better_auto_crafter:stocking_upgrade_tier_3"
+    ]
+  }
+}

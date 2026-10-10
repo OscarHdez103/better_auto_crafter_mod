@@ -4,12 +4,19 @@ import java.util.ArrayList;
 import java.util.List;
 
 import laseta.bac.block.BetterAutoCrafterBlock;
+import laseta.bac.crafting.CraftingAnchor;
 import laseta.bac.crafting.CraftingSettings;
 import laseta.bac.crafting.ExternalCraftingOperation;
 import laseta.bac.crafting.RedstoneMode;
+import laseta.bac.item.StockingUpgradeItem;
+import laseta.bac.item.TranslocationUpgradeItem;
 import laseta.bac.menu.BetterAutoCrafterMenu;
 import laseta.bac.registry.ModBlockEntities;
 import laseta.bac.sideconfig.SideConfiguration;
+import laseta.bac.upgrade.Translocation;
+import laseta.bac.upgrade.UpgradeInventory;
+import laseta.bac.upgrade.UpgradeSlotType;
+import laseta.bac.upgrade.UpgradeStatus;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
@@ -21,6 +28,7 @@ import net.minecraft.world.MenuProvider;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.ContainerData;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.CraftingInput;
 import net.minecraft.world.item.crafting.CraftingRecipe;
@@ -35,7 +43,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * Holds the 3x3 template grid and the block's configuration.
+ * Holds the 3x3 template grid, the upgrades and the block's configuration.
  * Deliberately exposes no item capability: hoppers, pipes and other blocks can't insert into or extract from it.
  * It only reads/writes its neighbours' inventories itself, when crafting.
  */
@@ -54,6 +62,7 @@ public class BetterAutoCrafterBlockEntity extends BlockEntity implements MenuPro
 
     private final SideConfiguration sideConfig = new SideConfiguration(this::setChanged);
     private final CraftingSettings craftingSettings = new CraftingSettings(this::setChanged);
+    private final UpgradeInventory upgrades = new UpgradeInventory(this::setChanged);
 
     @Nullable
     private RecipeHolder<CraftingRecipe> cachedRecipe;
@@ -80,6 +89,52 @@ public class BetterAutoCrafterBlockEntity extends BlockEntity implements MenuPro
 
     public CraftingSettings getCraftingSettings() {
         return craftingSettings;
+    }
+
+    public UpgradeInventory getUpgrades() {
+        return upgrades;
+    }
+
+    /** Server only: where an installed translocation upgrade moves the faces to (or why it doesn't work). */
+    public Translocation.Result resolveUpgrade(UpgradeSlotType type) {
+        if (!(level instanceof ServerLevel serverLevel)) {
+            return new Translocation.Result(UpgradeStatus.EMPTY, null);
+        }
+        return Translocation.resolve(upgrades.get(type), serverLevel);
+    }
+
+    /** Server only: whether the upgrade in a slot works. Upgrades that need nothing from the world always do. */
+    public UpgradeStatus getUpgradeStatus(UpgradeSlotType type) {
+        ItemStack stack = upgrades.get(type);
+        if (stack.isEmpty()) {
+            return UpgradeStatus.EMPTY;
+        }
+        return stack.getItem() instanceof TranslocationUpgradeItem ? resolveUpgrade(type).status() : UpgradeStatus.ACTIVE;
+    }
+
+    /** How many of the result an output inventory may hold before it stops receiving crafts; 0 means no limit. */
+    public int getStockLimit() {
+        return StockingUpgradeItem.getStockLimit(upgrades.get(UpgradeSlotType.STOCKING));
+    }
+
+    /** Upgrade status per slot as menu data, so the upgrades tab can show problems. Computed on demand. */
+    public ContainerData getUpgradeStatusData() {
+        return new ContainerData() {
+            @Override
+            public int get(int index) {
+                return getUpgradeStatus(UpgradeSlotType.byIndex(index)).ordinal();
+            }
+
+            @Override
+            public void set(int index, int value) {
+                // Read-only: derived from the installed upgrades and the world.
+            }
+
+            @Override
+            public int getCount() {
+                return UpgradeSlotType.COUNT;
+            }
+        };
     }
 
     public Direction getFacing() {
@@ -175,12 +230,31 @@ public class BetterAutoCrafterBlockEntity extends BlockEntity implements MenuPro
         if (cachedRecipe == null) {
             return false;
         }
+        // Translocation upgrades move the input / output faces to a Translocator. An installed upgrade that doesn't
+        // work (not linked, Translocator unloaded or gone, ...) stops crafting instead of silently using the local faces.
+        CraftingAnchor self = new CraftingAnchor(serverLevel, worldPosition, getFacing());
+        CraftingAnchor inputAnchor = anchorFor(UpgradeSlotType.TRANSLOCATION_PULL, self);
+        CraftingAnchor outputAnchor = anchorFor(UpgradeSlotType.TRANSLOCATION_PUSH, self);
+        if (inputAnchor == null || outputAnchor == null) {
+            return false;
+        }
         List<ItemStack> template = new ArrayList<>(GRID_SIZE);
         for (int i = 0; i < GRID_SIZE; i++) {
             template.add(inventory.getStackInSlot(i));
         }
-        return ExternalCraftingOperation.tryCraft(serverLevel, worldPosition, getFacing(), sideConfig, craftingSettings,
-                template, cachedRecipe.value());
+        return ExternalCraftingOperation.tryCraft(serverLevel, worldPosition, inputAnchor, outputAnchor, sideConfig,
+                craftingSettings, getStockLimit(), template, cachedRecipe.value());
+    }
+
+    /** The crafter itself without an upgrade, the Translocator with a working one, null with a broken one. */
+    @Nullable
+    private CraftingAnchor anchorFor(UpgradeSlotType type, CraftingAnchor self) {
+        Translocation.Result result = resolveUpgrade(type);
+        return switch (result.status()) {
+            case EMPTY -> self;
+            case ACTIVE -> result.anchor();
+            default -> null;
+        };
     }
 
     private CraftingInput createCraftingInput() {
@@ -199,6 +273,21 @@ public class BetterAutoCrafterBlockEntity extends BlockEntity implements MenuPro
             Containers.dropItemStack(level, worldPosition.getX(), worldPosition.getY(), worldPosition.getZ(),
                     inventory.getStackInSlot(i));
         }
+        for (int i = 0; i < upgrades.getSlots(); i++) {
+            Containers.dropItemStack(level, worldPosition.getX(), worldPosition.getY(), worldPosition.getZ(),
+                    upgrades.getStackInSlot(i));
+        }
+    }
+
+    @Override
+    public void onLoad() {
+        super.onLoad();
+        // Upgrades saved in slots that no longer exist (only if slot types were ever removed) aren't lost.
+        if (level != null && !level.isClientSide) {
+            for (ItemStack orphan : upgrades.takeOrphans()) {
+                Containers.dropItemStack(level, worldPosition.getX(), worldPosition.getY() + 1, worldPosition.getZ(), orphan);
+            }
+        }
     }
 
     @Override
@@ -207,6 +296,7 @@ public class BetterAutoCrafterBlockEntity extends BlockEntity implements MenuPro
         tag.put("inventory", inventory.serializeNBT(registries));
         tag.put("side_config", sideConfig.save());
         tag.put("crafting_settings", craftingSettings.save());
+        tag.put("upgrades", upgrades.serializeNBT(registries));
     }
 
     @Override
@@ -215,6 +305,7 @@ public class BetterAutoCrafterBlockEntity extends BlockEntity implements MenuPro
         inventory.deserializeNBT(registries, tag.getCompound("inventory"));
         sideConfig.load(tag.getCompound("side_config"));
         craftingSettings.load(tag.getCompound("crafting_settings"));
+        upgrades.deserializeNBT(registries, tag.getCompound("upgrades"));
         resultDirty = true;
     }
 

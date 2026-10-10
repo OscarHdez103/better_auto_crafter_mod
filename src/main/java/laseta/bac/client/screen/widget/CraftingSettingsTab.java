@@ -266,10 +266,10 @@ public class CraftingSettingsTab extends SideTab {
     }
 
     @Override
-    protected void contentClicked(double mouseX, double mouseY, int button) {
+    protected boolean contentClicked(double mouseX, double mouseY, int button) {
         Setting setting = settingAt(mouseX, mouseY);
         if (setting == null || (button != 0 && button != 1)) {
-            return;
+            return true;
         }
         boolean previous = button == 1;
         int buttonId = switch (setting) {
@@ -285,5 +285,6 @@ public class CraftingSettingsTab extends SideTab {
                     : BetterAutoCrafterMenu.BUTTON_OUTPUT_PRIORITY_NEXT;
         };
         sendMenuButton(menu, buttonId);
+        return true;
     }
 }

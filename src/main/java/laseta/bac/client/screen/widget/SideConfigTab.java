@@ -167,10 +167,10 @@ public class SideConfigTab extends SideTab {
     }
 
     @Override
-    protected void contentClicked(double mouseX, double mouseY, int button) {
+    protected boolean contentClicked(double mouseX, double mouseY, int button) {
         RelativeSide side = sideAt(mouseX, mouseY);
         if (side == null || (button != 0 && button != 1)) {
-            return;
+            return true;
         }
         int buttonId;
         if (Screen.hasShiftDown()) {
@@ -181,6 +181,7 @@ public class SideConfigTab extends SideTab {
             buttonId = BetterAutoCrafterMenu.nextModeButton(side);
         }
         sendMenuButton(menu, buttonId);
+        return true;
     }
 
     /** Texture actually used by the block model on that face, so resource packs / model changes are reflected. */
