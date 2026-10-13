@@ -1,0 +1,42 @@
+{
+  "neoforge:conditions": [
+    {
+      "type": "neoforge:mod_loaded",
+      "modid": "toms_storage"
+    }
+  ],
+  "parent": "minecraft:recipes/root",
+  "criteria": {
+    "has_storage_link_upgrade": {
+      "trigger": "minecraft:inventory_changed",
+      "conditions": {
+        "items": [
+          {
+            "items": "better_auto_crafter:storage_link_upgrade"
+          }
+        ]
+      }
+    },
+    "has_better_auto_crafter": {
+      "trigger": "minecraft:inventory_changed",
+      "conditions": {
+        "items": [
+          {
+            "items": "better_auto_crafter:better_auto_crafter"
+          }
+        ]
+      }
+    }
+  },
+  "requirements": [
+    [
+      "has_storage_link_upgrade",
+      "has_better_auto_crafter"
+    ]
+  ],
+  "rewards": {
+    "recipes": [
+      "better_auto_crafter:toms_storage_link_upgrade"
+    ]
+  }
+}

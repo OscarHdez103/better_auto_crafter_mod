@@ -9,7 +9,7 @@ import laseta.bac.client.screen.widget.SideConfigTab;
 import laseta.bac.client.screen.widget.SideTab;
 import laseta.bac.client.screen.widget.SideTabGroup;
 import laseta.bac.client.screen.widget.UpgradesTab;
-import laseta.bac.item.TranslocationUpgradeItem;
+import laseta.bac.item.LinkingUpgradeItem;
 import laseta.bac.menu.BetterAutoCrafterMenu;
 import laseta.bac.menu.slot.UpgradeSlot;
 import laseta.bac.registry.ModBlocks;
@@ -113,10 +113,10 @@ public class BetterAutoCrafterScreen extends AbstractContainerScreen<BetterAutoC
         List<Component> tooltip = new ArrayList<>(super.getTooltipFromContainerItem(stack));
         if (hoveredSlot instanceof UpgradeSlot upgradeSlot) {
             UpgradeStatus status = menu.getUpgradeStatus(upgradeSlot.getType());
-            // Only translocation upgrades depend on the world; stocking upgrades' own tooltip says what they do.
-            if (stack.getItem() instanceof TranslocationUpgradeItem && status != UpgradeStatus.EMPTY) {
+            // Only linked upgrades depend on the world; stocking upgrades' own tooltip says what they do.
+            if (stack.getItem() instanceof LinkingUpgradeItem && status != UpgradeStatus.EMPTY) {
                 tooltip.add(status.getDescription().copy()
-                        .withStyle(status.isProblem() ? ChatFormatting.RED : ChatFormatting.GREEN));
+                        .withStyle(status.isProblem() ? ChatFormatting.RED : status.isWarning() ? ChatFormatting.GOLD : ChatFormatting.GREEN));
             }
         }
         return tooltip;

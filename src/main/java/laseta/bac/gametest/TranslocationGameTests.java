@@ -323,6 +323,25 @@ public final class TranslocationGameTests {
         helper.succeed();
     }
 
+    @GameTest(template = TEMPLATE, skyAccess = true) // no barrier ceiling, so looking up hits nothing
+    public static void sneakUseAtNothingClearsTheWholeStack(GameTestHelper helper) {
+        Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+        Vec3 standAt = helper.absoluteVec(new Vec3(2.5, 3, 2.5));
+        player.moveTo(standAt.x, standAt.y, standAt.z, 0.0F, -90.0F); // looking straight up, at the sky
+        ItemStack stack = linked(helper, new ItemStack(ModItems.TRANSLOCATION_UPGRADE_PUSH.get(), 12), TRANSLOCATOR);
+        player.setItemInHand(InteractionHand.MAIN_HAND, stack);
+
+        stack.use(helper.getLevel(), player, InteractionHand.MAIN_HAND);
+        helper.assertTrue(TranslocationUpgradeItem.getLink(player.getMainHandItem()) != null, "not sneaking: link kept");
+
+        player.setShiftKeyDown(true);
+        player.getMainHandItem().use(helper.getLevel(), player, InteractionHand.MAIN_HAND);
+        ItemStack held = player.getMainHandItem();
+        helper.assertTrue(held.getCount() == 12 && TranslocationUpgradeItem.getLink(held) == null,
+                "sneak-use at nothing clears all 12, got " + held);
+        helper.succeed();
+    }
+
     // ---------------------------------------------------------------------------------------------------------------
     // Installing
     // ---------------------------------------------------------------------------------------------------------------

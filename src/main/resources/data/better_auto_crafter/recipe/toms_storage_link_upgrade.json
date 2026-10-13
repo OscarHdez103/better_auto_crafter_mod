@@ -1,0 +1,29 @@
+{
+  "neoforge:conditions": [
+    {
+      "type": "neoforge:mod_loaded",
+      "modid": "toms_storage"
+    }
+  ],
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "pattern": [
+    "BE",
+    "L "
+  ],
+  "key": {
+    "B": {
+      "item": "better_auto_crafter:storage_link_upgrade"
+    },
+    "E": {
+      "item": "minecraft:chest"
+    },
+    "L": {
+      "item": "toms_storage:level_emitter"
+    }
+  },
+  "result": {
+    "id": "better_auto_crafter:toms_storage_link_upgrade",
+    "count": 1
+  }
+}

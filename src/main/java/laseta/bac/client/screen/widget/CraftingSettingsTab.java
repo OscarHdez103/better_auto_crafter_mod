@@ -4,9 +4,11 @@ import java.util.List;
 
 import laseta.bac.crafting.RedstoneMode;
 import laseta.bac.crafting.TransferPriority;
+import laseta.bac.item.MultiTranslocationUpgradeItem;
 import laseta.bac.menu.BetterAutoCrafterMenu;
 import laseta.bac.sideconfig.RelativeSide;
 import laseta.bac.sideconfig.SideMode;
+import laseta.bac.upgrade.UpgradeSlotType;
 import net.minecraft.ChatFormatting;
 import net.minecraft.Util;
 import net.minecraft.client.gui.Font;
@@ -237,12 +239,17 @@ public class CraftingSettingsTab extends SideTab {
         return switch (setting) {
             case MATCH_NBT -> Component.translatable("gui.better_auto_crafter.setting.match_nbt." + (menu.isMatchNbt() ? "on" : "off"));
             case REDSTONE -> menu.getRedstoneMode().getDescription();
-            case INPUT_PRIORITY -> priorityExplanation(menu.getInputPriority(), "input");
-            case OUTPUT_PRIORITY -> priorityExplanation(menu.getOutputPriority(), "output");
+            case INPUT_PRIORITY -> priorityExplanation(menu.getInputPriority(), "input", UpgradeSlotType.TRANSLOCATION_PULL);
+            case OUTPUT_PRIORITY -> priorityExplanation(menu.getOutputPriority(), "output", UpgradeSlotType.TRANSLOCATION_PUSH);
         };
     }
 
-    private static Component priorityExplanation(TransferPriority priority, String direction) {
+    /** With a multi translocation upgrade there are no faces: round robin goes through the linked blocks, otherwise their link order is used. */
+    private Component priorityExplanation(TransferPriority priority, String direction, UpgradeSlotType upgradeSlot) {
+        if (menu.getUpgradeSlot(upgradeSlot).getItem().getItem() instanceof MultiTranslocationUpgradeItem) {
+            return Component.translatable("gui.better_auto_crafter.priority." + direction + ".linked."
+                    + (priority.getPreferredSide() == null ? "round_robin" : "in_order"));
+        }
         return priority.getPreferredSide() == null
                 ? Component.translatable("gui.better_auto_crafter.priority." + direction + ".round_robin")
                 : Component.translatable("gui.better_auto_crafter.priority." + direction + ".face", priority.getDisplayName());

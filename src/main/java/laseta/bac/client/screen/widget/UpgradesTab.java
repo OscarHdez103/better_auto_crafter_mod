@@ -18,7 +18,7 @@ import org.jetbrains.annotations.Nullable;
  * Green tab on the left of the GUI holding the upgrade slots. The slots themselves are real menu slots
  * ({@link laseta.bac.menu.slot.UpgradeSlot}) that the screen shows while this tab is open; this tab draws their
  * frames, a faded icon of what goes into each empty slot, and a coloured frame showing whether the installed
- * upgrade works (green) or not (red, with the reason in the item's tooltip).
+ * upgrade works (green), partly works (yellow) or not (red), with the reason in the item's tooltip.
  */
 public class UpgradesTab extends SideTab {
     private static final Component TITLE = Component.translatable("gui.better_auto_crafter.upgrades");
@@ -32,6 +32,7 @@ public class UpgradesTab extends SideTab {
     private static final int GHOST_FADE = 0xB08B8B8B;
     private static final int ACTIVE_FRAME = 0xFF55E055;
     private static final int PROBLEM_FRAME = 0xFFFF4040;
+    private static final int WARNING_FRAME = 0xFFFFC020;
     /** Above items rendered in the GUI, so the fade drawn over the ghost icon isn't hidden behind it. */
     private static final float OVERLAY_Z = 200.0F;
 
@@ -108,8 +109,9 @@ public class UpgradesTab extends SideTab {
             boolean installed = menu.getUpgradeSlot(type).hasItem();
 
             if (installed && status != UpgradeStatus.EMPTY) {
-                // Coloured frame instead of the bevel: green = working, red = not working.
-                graphics.fill(left, top, right, bottom, status.isProblem() ? PROBLEM_FRAME : ACTIVE_FRAME);
+                // Coloured frame instead of the bevel: green = working, yellow = partly working, red = not working.
+                graphics.fill(left, top, right, bottom,
+                        status.isProblem() ? PROBLEM_FRAME : status.isWarning() ? WARNING_FRAME : ACTIVE_FRAME);
             } else {
                 graphics.fill(left, top, right - 1, top + 1, SLOT_DARK);
                 graphics.fill(left, top + 1, left + 1, bottom - 1, SLOT_DARK);

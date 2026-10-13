@@ -3,7 +3,7 @@ package laseta.bac.registry;
 import java.util.function.Supplier;
 
 import laseta.bac.BetterAutoCrafter;
-import laseta.bac.recipe.TranslocationUpgradeResetRecipe;
+import laseta.bac.recipe.UpgradeLinkResetRecipe;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.item.crafting.RecipeSerializer;
 import net.minecraft.world.item.crafting.SimpleCraftingRecipeSerializer;
@@ -14,9 +14,10 @@ public final class ModRecipeSerializers {
     public static final DeferredRegister<RecipeSerializer<?>> RECIPE_SERIALIZERS =
             DeferredRegister.create(Registries.RECIPE_SERIALIZER, BetterAutoCrafter.MODID);
 
-    public static final Supplier<SimpleCraftingRecipeSerializer<TranslocationUpgradeResetRecipe>> TRANSLOCATION_UPGRADE_RESET =
+    /** Clears linked upgrades. Keeps its original id so existing recipe files and data packs still work. */
+    public static final Supplier<SimpleCraftingRecipeSerializer<UpgradeLinkResetRecipe>> UPGRADE_LINK_RESET =
             RECIPE_SERIALIZERS.register("translocation_upgrade_reset",
-                    () -> new SimpleCraftingRecipeSerializer<>(TranslocationUpgradeResetRecipe::new));
+                    () -> new SimpleCraftingRecipeSerializer<>(UpgradeLinkResetRecipe::new));
 
     private ModRecipeSerializers() {
     }

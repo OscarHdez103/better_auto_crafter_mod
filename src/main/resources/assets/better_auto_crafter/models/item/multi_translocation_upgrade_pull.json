@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "better_auto_crafter:item/multi_translocation_upgrade_pull"
+  }
+}

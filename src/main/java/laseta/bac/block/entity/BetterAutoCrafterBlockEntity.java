@@ -2,17 +2,25 @@ package laseta.bac.block.entity;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Predicate;
 
 import laseta.bac.block.BetterAutoCrafterBlock;
 import laseta.bac.crafting.CraftingAnchor;
 import laseta.bac.crafting.CraftingSettings;
 import laseta.bac.crafting.ExternalCraftingOperation;
+import laseta.bac.crafting.InventoryFace;
 import laseta.bac.crafting.RedstoneMode;
+import laseta.bac.item.MultiTranslocationUpgradeItem;
 import laseta.bac.item.StockingUpgradeItem;
+import laseta.bac.item.StorageLinkUpgradeItem;
+import laseta.bac.stock.StockReading;
+import laseta.bac.stock.StorageLink;
 import laseta.bac.item.TranslocationUpgradeItem;
 import laseta.bac.menu.BetterAutoCrafterMenu;
 import laseta.bac.registry.ModBlockEntities;
 import laseta.bac.sideconfig.SideConfiguration;
+import laseta.bac.sideconfig.SideMode;
+import laseta.bac.upgrade.MultiTranslocation;
 import laseta.bac.upgrade.Translocation;
 import laseta.bac.upgrade.UpgradeInventory;
 import laseta.bac.upgrade.UpgradeSlotType;
@@ -95,7 +103,10 @@ public class BetterAutoCrafterBlockEntity extends BlockEntity implements MenuPro
         return upgrades;
     }
 
-    /** Server only: where an installed translocation upgrade moves the faces to (or why it doesn't work). */
+    /**
+     * Server only: where an installed translocation upgrade moves the faces to (or why it doesn't work). EMPTY for a
+     * multi translocation upgrade, see {@link MultiTranslocation}.
+     */
     public Translocation.Result resolveUpgrade(UpgradeSlotType type) {
         if (!(level instanceof ServerLevel serverLevel)) {
             return new Translocation.Result(UpgradeStatus.EMPTY, null);
@@ -109,10 +120,30 @@ public class BetterAutoCrafterBlockEntity extends BlockEntity implements MenuPro
         if (stack.isEmpty()) {
             return UpgradeStatus.EMPTY;
         }
-        return stack.getItem() instanceof TranslocationUpgradeItem ? resolveUpgrade(type).status() : UpgradeStatus.ACTIVE;
+        if (stack.getItem() instanceof TranslocationUpgradeItem) {
+            return resolveUpgrade(type).status();
+        }
+        if (stack.getItem() instanceof MultiTranslocationUpgradeItem && level instanceof ServerLevel serverLevel) {
+            return MultiTranslocation.resolve(stack, serverLevel).status();
+        }
+        if (stack.getItem() instanceof StorageLinkUpgradeItem) {
+            return resolveStorageLink().status();
+        }
+        return UpgradeStatus.ACTIVE;
     }
 
-    /** How many of the result an output inventory may hold before it stops receiving crafts; 0 means no limit. */
+    /** Server only: the storage an installed Storage Link Upgrade counts the stock in (or why it can't). */
+    public StockReading resolveStorageLink() {
+        if (!(level instanceof ServerLevel serverLevel)) {
+            return StockReading.of(UpgradeStatus.EMPTY);
+        }
+        return StorageLink.resolve(upgrades.get(UpgradeSlotType.STORAGE_LINK), serverLevel);
+    }
+
+    /**
+     * How many of the result an output inventory (or the storage linked by a Storage Link Upgrade) may hold before
+     * the crafter stops crafting into it; 0 means no limit.
+     */
     public int getStockLimit() {
         return StockingUpgradeItem.getStockLimit(upgrades.get(UpgradeSlotType.STOCKING));
     }
@@ -230,29 +261,44 @@ public class BetterAutoCrafterBlockEntity extends BlockEntity implements MenuPro
         if (cachedRecipe == null) {
             return false;
         }
-        // Translocation upgrades move the input / output faces to a Translocator. An installed upgrade that doesn't
-        // work (not linked, Translocator unloaded or gone, ...) stops crafting instead of silently using the local faces.
+        // Translocation upgrades move the input / output faces to a Translocator, multi translocation upgrades replace
+        // them with their linked blocks. An installed upgrade that doesn't work (not linked, Translocator unloaded or
+        // gone, ...) stops crafting instead of silently using the local faces.
         CraftingAnchor self = new CraftingAnchor(serverLevel, worldPosition, getFacing());
-        CraftingAnchor inputAnchor = anchorFor(UpgradeSlotType.TRANSLOCATION_PULL, self);
-        CraftingAnchor outputAnchor = anchorFor(UpgradeSlotType.TRANSLOCATION_PUSH, self);
-        if (inputAnchor == null || outputAnchor == null) {
+        List<InventoryFace> inputs = facesFor(UpgradeSlotType.TRANSLOCATION_PULL, self, SideMode::canInput);
+        List<InventoryFace> outputs = facesFor(UpgradeSlotType.TRANSLOCATION_PUSH, self, SideMode::canOutput);
+        if (inputs == null || outputs == null) {
+            return false;
+        }
+        // A Storage Link Upgrade makes the stocking upgrades count in the linked storage; a broken one stops crafting too.
+        StockReading storageLink = resolveStorageLink();
+        if (storageLink.status().isProblem()) {
             return false;
         }
         List<ItemStack> template = new ArrayList<>(GRID_SIZE);
         for (int i = 0; i < GRID_SIZE; i++) {
             template.add(inventory.getStackInSlot(i));
         }
-        return ExternalCraftingOperation.tryCraft(serverLevel, worldPosition, inputAnchor, outputAnchor, sideConfig,
-                craftingSettings, getStockLimit(), template, cachedRecipe.value());
+        return ExternalCraftingOperation.tryCraft(serverLevel, worldPosition, inputs, outputs, craftingSettings,
+                getStockLimit(), storageLink.counter(), template, cachedRecipe.value());
     }
 
-    /** The crafter itself without an upgrade, the Translocator with a working one, null with a broken one. */
+    /**
+     * The inventories on one side of the craft: the configured faces of the crafter itself without an upgrade, of the
+     * Translocator with a working translocation upgrade, the linked blocks with a working multi translocation upgrade
+     * (ignoring the side configuration); null with a broken upgrade.
+     */
     @Nullable
-    private CraftingAnchor anchorFor(UpgradeSlotType type, CraftingAnchor self) {
+    private List<InventoryFace> facesFor(UpgradeSlotType type, CraftingAnchor self, Predicate<SideMode> filter) {
+        ItemStack upgrade = upgrades.get(type);
+        if (upgrade.getItem() instanceof MultiTranslocationUpgradeItem) {
+            MultiTranslocation.Result result = MultiTranslocation.resolve(upgrade, self.level());
+            return result.status().isProblem() ? null : result.faces();
+        }
         Translocation.Result result = resolveUpgrade(type);
         return switch (result.status()) {
-            case EMPTY -> self;
-            case ACTIVE -> result.anchor();
+            case EMPTY -> ExternalCraftingOperation.facesAround(self, sideConfig, filter);
+            case ACTIVE -> ExternalCraftingOperation.facesAround(result.anchor(), sideConfig, filter);
             default -> null;
         };
     }

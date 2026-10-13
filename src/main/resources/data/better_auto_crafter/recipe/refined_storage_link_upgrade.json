@@ -1,0 +1,29 @@
+{
+  "neoforge:conditions": [
+    {
+      "type": "neoforge:mod_loaded",
+      "modid": "refinedstorage"
+    }
+  ],
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "pattern": [
+    "BE",
+    "L "
+  ],
+  "key": {
+    "B": {
+      "item": "better_auto_crafter:storage_link_upgrade"
+    },
+    "E": {
+      "item": "refinedstorage:advanced_processor"
+    },
+    "L": {
+      "item": "refinedstorage:detector"
+    }
+  },
+  "result": {
+    "id": "better_auto_crafter:refined_storage_link_upgrade",
+    "count": 1
+  }
+}

@@ -4,7 +4,7 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import laseta.bac.item.StockingUpgradeItem;
-import laseta.bac.item.TranslocationUpgradeItem;
+import laseta.bac.item.StorageLinkUpgradeItem;
 import laseta.bac.registry.ModItems;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.Item;
@@ -21,10 +21,11 @@ import org.jetbrains.annotations.Nullable;
  */
 public enum UpgradeSlotType {
     TRANSLOCATION_PULL("translocation_pull", ModItems.TRANSLOCATION_UPGRADE_PULL, 1,
-            stack -> stack.getItem() instanceof TranslocationUpgradeItem upgrade && upgrade.getMode() == TranslocationMode.PULL),
+            stack -> stack.getItem() instanceof TranslocationUpgrade upgrade && upgrade.getMode() == TranslocationMode.PULL),
     TRANSLOCATION_PUSH("translocation_push", ModItems.TRANSLOCATION_UPGRADE_PUSH, 1,
-            stack -> stack.getItem() instanceof TranslocationUpgradeItem upgrade && upgrade.getMode() == TranslocationMode.PUSH),
-    STOCKING("stocking", ModItems.STOCKING_UPGRADE, 64, stack -> stack.getItem() instanceof StockingUpgradeItem);
+            stack -> stack.getItem() instanceof TranslocationUpgrade upgrade && upgrade.getMode() == TranslocationMode.PUSH),
+    STOCKING("stocking", ModItems.STOCKING_UPGRADE, 64, stack -> stack.getItem() instanceof StockingUpgradeItem),
+    STORAGE_LINK("storage_link", ModItems.STORAGE_LINK_UPGRADE, 1, stack -> stack.getItem() instanceof StorageLinkUpgradeItem);
 
     public static final int COUNT = values().length;
     private static final UpgradeSlotType[] VALUES = values();

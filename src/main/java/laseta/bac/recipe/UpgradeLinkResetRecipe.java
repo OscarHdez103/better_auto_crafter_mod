@@ -1,7 +1,6 @@
 package laseta.bac.recipe;
 
-import laseta.bac.item.TranslocationUpgradeItem;
-import laseta.bac.registry.ModDataComponents;
+import laseta.bac.item.LinkingUpgradeItem;
 import laseta.bac.registry.ModRecipeSerializers;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.world.item.ItemStack;
@@ -13,12 +12,12 @@ import net.minecraft.world.level.Level;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * A linked translocation upgrade alone in a crafting grid gives the same upgrade without its link.
+ * A linked upgrade (translocation, multi translocation or storage link) alone in a crafting grid gives the same upgrade without its link.
  * A "special" recipe (like vanilla's map cloning), so it only matches linked upgrades and recipe viewers don't list
  * it as a confusing "upgrade -> upgrade" recipe.
  */
-public class TranslocationUpgradeResetRecipe extends CustomRecipe {
-    public TranslocationUpgradeResetRecipe(CraftingBookCategory category) {
+public class UpgradeLinkResetRecipe extends CustomRecipe {
+    public UpgradeLinkResetRecipe(CraftingBookCategory category) {
         super(category);
     }
 
@@ -34,7 +33,7 @@ public class TranslocationUpgradeResetRecipe extends CustomRecipe {
             return ItemStack.EMPTY;
         }
         ItemStack reset = upgrade.copyWithCount(1);
-        reset.remove(ModDataComponents.TRANSLOCATOR_LINK.get());
+        ((LinkingUpgradeItem) upgrade.getItem()).clearLinks(reset);
         return reset;
     }
 
@@ -46,8 +45,7 @@ public class TranslocationUpgradeResetRecipe extends CustomRecipe {
             if (stack.isEmpty()) {
                 continue;
             }
-            if (!found.isEmpty() || !(stack.getItem() instanceof TranslocationUpgradeItem)
-                    || TranslocationUpgradeItem.getLink(stack) == null) {
+            if (!found.isEmpty() || !LinkingUpgradeItem.isLinked(stack)) {
                 return ItemStack.EMPTY;
             }
             found = stack;
@@ -62,6 +60,6 @@ public class TranslocationUpgradeResetRecipe extends CustomRecipe {
 
     @Override
     public @NotNull RecipeSerializer<?> getSerializer() {
-        return ModRecipeSerializers.TRANSLOCATION_UPGRADE_RESET.get();
+        return ModRecipeSerializers.UPGRADE_LINK_RESET.get();
     }
 }

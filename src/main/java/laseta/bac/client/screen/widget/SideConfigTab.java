@@ -1,12 +1,15 @@
 package laseta.bac.client.screen.widget;
 
+import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 
+import laseta.bac.item.MultiTranslocationUpgradeItem;
 import laseta.bac.menu.BetterAutoCrafterMenu;
 import laseta.bac.sideconfig.RelativeSide;
 import laseta.bac.sideconfig.SideMode;
+import laseta.bac.upgrade.UpgradeSlotType;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -19,13 +22,15 @@ import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.neoforge.client.model.data.ModelData;
 import org.jetbrains.annotations.Nullable;
 
 /**
  * Side configuration tab: one button per face of the block, laid out like an unfolded cube seen from the front.
- * Clicking a face cycles its {@link SideMode}.
+ * Clicking a face cycles its {@link SideMode}. Faces whose mode is replaced by an installed multi translocation upgrade
+ * are dimmed, and their tooltip says so.
  */
 public class SideConfigTab extends SideTab {
     private static final Component TITLE = Component.translatable("gui.better_auto_crafter.side_config");
@@ -49,6 +54,7 @@ public class SideConfigTab extends SideTab {
     private static final int WELL_LIGHT = 0xFF8FB6DD;
     private static final int WELL_FILL = 0xFF2E5277;
     private static final int HOVER_OVERLAY = 0x80FFFFFF;
+    private static final int UNUSED_OVERLAY = 0xA0202020;
 
     private final BetterAutoCrafterMenu menu;
     private final Direction facing;
@@ -130,9 +136,21 @@ public class SideConfigTab extends SideTab {
             graphics.fill(ix + inner - 1, iy + 1, ix + inner, iy + inner - 1, solid);
         }
 
+        if (mode != SideMode.NONE && (!mode.canInput() || replacingUpgrade(UpgradeSlotType.TRANSLOCATION_PULL) != null)
+                && (!mode.canOutput() || replacingUpgrade(UpgradeSlotType.TRANSLOCATION_PUSH) != null)) {
+            graphics.fill(ix, iy, ix + inner, iy + inner, UNUSED_OVERLAY);
+        }
+
         if (hovered) {
             graphics.fill(ix, iy, ix + inner, iy + inner, HOVER_OVERLAY);
         }
+    }
+
+    /** The multi translocation upgrade installed in the slot, which replaces the faces of that kind; null if none. */
+    @Nullable
+    private ItemStack replacingUpgrade(UpgradeSlotType slot) {
+        ItemStack installed = menu.getUpgradeSlot(slot).getItem();
+        return installed.getItem() instanceof MultiTranslocationUpgradeItem ? installed : null;
     }
 
     private ScreenRectangle buttonRect(RelativeSide side) {
@@ -155,15 +173,25 @@ public class SideConfigTab extends SideTab {
         }
         SideMode mode = menu.getSideMode(side);
         Direction direction = side.toDirection(facing);
-        return new Hover(List.of(
+        List<Component> lines = new ArrayList<>(List.of(
                 Component.translatable("gui.better_auto_crafter.side_config.face", side.getDisplayName(),
                         Component.translatable("gui.better_auto_crafter.direction." + direction.getSerializedName())),
                 mode.getDisplayName().copy().withStyle(style -> style.withColor(mode.getColor())),
-                mode.getDescription().copy().withStyle(ChatFormatting.GRAY),
-                Component.translatable("gui.better_auto_crafter.side_config.hint.next").withStyle(ChatFormatting.DARK_GRAY),
-                Component.translatable("gui.better_auto_crafter.side_config.hint.previous").withStyle(ChatFormatting.DARK_GRAY),
-                Component.translatable("gui.better_auto_crafter.side_config.hint.reset").withStyle(ChatFormatting.DARK_GRAY)),
-                buttonRect(side));
+                mode.getDescription().copy().withStyle(ChatFormatting.GRAY)));
+        ItemStack pull = replacingUpgrade(UpgradeSlotType.TRANSLOCATION_PULL);
+        if (mode.canInput() && pull != null) {
+            lines.add(Component.translatable("gui.better_auto_crafter.side_config.replaced.input", pull.getHoverName())
+                    .withStyle(ChatFormatting.GOLD));
+        }
+        ItemStack push = replacingUpgrade(UpgradeSlotType.TRANSLOCATION_PUSH);
+        if (mode.canOutput() && push != null) {
+            lines.add(Component.translatable("gui.better_auto_crafter.side_config.replaced.output", push.getHoverName())
+                    .withStyle(ChatFormatting.GOLD));
+        }
+        lines.add(Component.translatable("gui.better_auto_crafter.side_config.hint.next").withStyle(ChatFormatting.DARK_GRAY));
+        lines.add(Component.translatable("gui.better_auto_crafter.side_config.hint.previous").withStyle(ChatFormatting.DARK_GRAY));
+        lines.add(Component.translatable("gui.better_auto_crafter.side_config.hint.reset").withStyle(ChatFormatting.DARK_GRAY));
+        return new Hover(lines, buttonRect(side));
     }
 
     @Override

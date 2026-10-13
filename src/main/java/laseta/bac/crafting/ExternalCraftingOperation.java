@@ -14,6 +14,8 @@ import laseta.bac.block.entity.BetterAutoCrafterBlockEntity;
 import laseta.bac.sideconfig.RelativeSide;
 import laseta.bac.sideconfig.SideConfiguration;
 import laseta.bac.sideconfig.SideMode;
+import laseta.bac.stock.InventoryStockReader;
+import laseta.bac.stock.StockReading;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
@@ -36,11 +38,13 @@ import org.slf4j.Logger;
  * hoppers and item pipes use, so any modded inventory that pipes can use (drawers and controllers, AE2,
  * Refined Storage, machines, ...) works.</p>
  *
- * <p>The input and output faces each belong to a {@link CraftingAnchor}: normally the crafter itself, or a
- * Translocator when a translocation upgrade moves them there (possibly to another dimension).</p>
+ * <p>The inventories come as {@link InventoryFace}s, so the operation doesn't care where they are: the faces around a
+ * {@link CraftingAnchor} (the crafter itself, or a Translocator when a translocation upgrade moves them there, possibly
+ * to another dimension; see {@link #facesAround}), or the blocks linked by a Multi Translocation Upgrade.</p>
  *
  * <p>With a stock limit (stocking upgrades), an output inventory that already holds that many of the result
- * doesn't receive it; if every output inventory is stocked, nothing is crafted.</p>
+ * doesn't receive it; if every output inventory is stocked, nothing is crafted. With a linked storage (Storage Link
+ * Upgrade) the stock is counted there instead, and nothing is crafted once it holds that many.</p>
  *
  * <p>Order of operations, so items are never lost or duplicated:</p>
  * <ol>
@@ -60,9 +64,6 @@ public final class ExternalCraftingOperation {
     private record Take(IItemHandler handler, int slot, ItemStack expected) {
     }
 
-    private record Face(RelativeSide side, IItemHandler handler) {
-    }
-
     private record Extracted(IItemHandler handler, int slot, ItemStack stack) {
     }
 
@@ -72,33 +73,35 @@ public final class ExternalCraftingOperation {
     private final List<IItemHandler> inputs;
     private final List<IItemHandler> outputs;
     private final int stockLimit;
+    @Nullable
+    private final StockReading.Counter linkedStock;
 
-    private ExternalCraftingOperation(ServerLevel level, BlockPos pos, CraftingAnchor inputAnchor, CraftingAnchor outputAnchor,
-                                      SideConfiguration sides, CraftingSettings settings, int stockLimit) {
+    private ExternalCraftingOperation(ServerLevel level, BlockPos pos, List<InventoryFace> inputFaces, List<InventoryFace> outputFaces,
+                                      CraftingSettings settings, int stockLimit, @Nullable StockReading.Counter linkedStock) {
         this.level = level;
         this.pos = pos;
         this.settings = settings;
         this.stockLimit = stockLimit;
-        this.inputs = handlersInOrder(findNeighbours(inputAnchor, sides, SideMode::canInput),
-                settings.getInputPriority(), settings.getInputCursor());
-        this.outputs = handlersInOrder(findNeighbours(outputAnchor, sides, SideMode::canOutput),
-                settings.getOutputPriority(), settings.getOutputCursor());
+        this.linkedStock = linkedStock;
+        this.inputs = handlersInOrder(inputFaces, settings.getInputPriority(), settings.getInputCursor());
+        this.outputs = handlersInOrder(outputFaces, settings.getOutputPriority(), settings.getOutputCursor());
     }
 
     /**
      * Tries to craft {@code recipe} once, as laid out by {@code template} (the 9 grid stacks).
      *
-     * @param level        the crafter's level (recipes are matched and leftovers dropped there)
-     * @param pos          the crafter's position
-     * @param inputAnchor  where the input faces are: the crafter itself, or a Translocator (pull upgrade)
-     * @param outputAnchor where the output faces are: the crafter itself, or a Translocator (push upgrade)
-     * @param stockLimit   output inventories holding at least this many of the result don't receive it; 0 = no limit
+     * @param level       the crafter's level (recipes are matched and leftovers dropped there)
+     * @param pos         the crafter's position
+     * @param inputs      where ingredients are pulled from
+     * @param outputs     where the result and remainders are pushed to
+     * @param stockLimit  output inventories holding at least this many of the result don't receive it; 0 = no limit
+     * @param linkedStock counts the stock in a linked storage instead of in each output inventory; null = per output
      * @return true if the craft happened
      */
-    public static boolean tryCraft(ServerLevel level, BlockPos pos, CraftingAnchor inputAnchor, CraftingAnchor outputAnchor,
-                                   SideConfiguration sides, CraftingSettings settings, int stockLimit,
+    public static boolean tryCraft(ServerLevel level, BlockPos pos, List<InventoryFace> inputs, List<InventoryFace> outputs,
+                                   CraftingSettings settings, int stockLimit, @Nullable StockReading.Counter linkedStock,
                                    List<ItemStack> template, CraftingRecipe recipe) {
-        boolean crafted = new ExternalCraftingOperation(level, pos, inputAnchor, outputAnchor, sides, settings, stockLimit)
+        boolean crafted = new ExternalCraftingOperation(level, pos, inputs, outputs, settings, stockLimit, linkedStock)
                 .craft(template, recipe);
         if (crafted) {
             settings.advanceRoundRobin();
@@ -222,24 +225,18 @@ public final class ExternalCraftingOperation {
         return exact ? ItemStack.isSameItemSameComponents(wanted, candidate) : ItemStack.isSameItem(wanted, candidate);
     }
 
-    /** The output inventories that hold fewer of {@code result} than the stock limit (all of them without a limit). */
+    /**
+     * The output inventories that may receive {@code result}: all of them without a stock limit, none once the linked
+     * storage is stocked, otherwise those that hold fewer than the stock limit.
+     */
     private List<IItemHandler> unstockedOutputs(ItemStack result) {
         if (stockLimit <= 0) {
             return outputs;
         }
-        return outputs.stream().filter(handler -> countStock(handler, result) < stockLimit).toList();
-    }
-
-    /** How many of {@code stack} (same item and data) the inventory holds, counting no further than the stock limit. */
-    private int countStock(IItemHandler handler, ItemStack stack) {
-        int count = 0;
-        for (int slot = 0; slot < handler.getSlots() && count < stockLimit; slot++) {
-            ItemStack inSlot = handler.getStackInSlot(slot);
-            if (ItemStack.isSameItemSameComponents(inSlot, stack)) {
-                count += inSlot.getCount();
-            }
+        if (linkedStock != null) {
+            return linkedStock.count(result, stockLimit) < stockLimit ? outputs : List.of();
         }
-        return count;
+        return outputs.stream().filter(handler -> InventoryStockReader.count(handler, result, stockLimit) < stockLimit).toList();
     }
 
     /** First of {@code targets} (in priority order) that accepts the whole stack. */
@@ -301,11 +298,14 @@ public final class ExternalCraftingOperation {
 
     // ---------------------------------------------------------------------------------------------------------------
 
-    /** Applies the priority, then drops duplicates (two faces exposing the very same handler object). */
-    private static List<IItemHandler> handlersInOrder(List<Face> faces, TransferPriority priority, int cursor) {
+    /**
+     * Applies the priority, then drops duplicates (two faces exposing the very same handler object). Faces without a
+     * crafter side (linked blocks) are never preferred, so a face priority keeps them in link order.
+     */
+    private static List<IItemHandler> handlersInOrder(List<InventoryFace> faces, TransferPriority priority, int cursor) {
         List<IItemHandler> handlers = new ArrayList<>();
         Map<IItemHandler, Boolean> seen = new IdentityHashMap<>();
-        for (Face face : priority.order(faces, Face::side, cursor)) {
+        for (InventoryFace face : priority.order(faces, InventoryFace::side, cursor)) {
             if (seen.put(face.handler(), Boolean.TRUE) == null) {
                 handlers.add(face.handler());
             }
@@ -317,9 +317,9 @@ public final class ExternalCraftingOperation {
      * Item handlers next to {@code anchor} on the faces accepted by {@code filter}, in {@link RelativeSide} order.
      * Neighbours in unloaded chunks are skipped (never loaded), like hoppers and pipes do.
      */
-    private static List<Face> findNeighbours(CraftingAnchor anchor, SideConfiguration sides, Predicate<SideMode> filter) {
+    public static List<InventoryFace> facesAround(CraftingAnchor anchor, SideConfiguration sides, Predicate<SideMode> filter) {
         ServerLevel level = anchor.level();
-        List<Face> faces = new ArrayList<>();
+        List<InventoryFace> faces = new ArrayList<>();
         for (RelativeSide side : RelativeSide.values()) {
             if (!filter.test(sides.getMode(side))) {
                 continue;
@@ -332,7 +332,7 @@ public final class ExternalCraftingOperation {
             // The context is the neighbour's side that touches us, exactly like a hopper or pipe would ask.
             IItemHandler handler = level.getCapability(Capabilities.ItemHandler.BLOCK, neighbourPos, direction.getOpposite());
             if (handler != null) {
-                faces.add(new Face(side, handler));
+                faces.add(new InventoryFace(side, handler));
             }
         }
         return faces;

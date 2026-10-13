@@ -31,6 +31,12 @@ repositories {
         url = "https://maven.terraformersmc.com/"
         content { includeGroup "dev.emi" }
     }
+    // Storage mods (AE2, Refined Storage), for the Storage Link Upgrades
+    maven {
+        name = "Modrinth"
+        url = "https://api.modrinth.com/maven"
+        content { includeGroup "maven.modrinth" }
+    }
 }
 
 base {
@@ -61,6 +67,8 @@ neoForge {
 
         gameTestServer {
             type = "gameTestServer"
+            // Its own world folder, so tests can run while the dev server (which uses "world") is open.
+            programArguments.addAll '--world', 'gametestworld'
             systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
         }
 
@@ -91,6 +99,11 @@ dependencies {
     // Recipe viewer APIs: compile-only, the mod runs with or without them installed.
     compileOnly "mezz.jei:jei-${minecraft_version}-neoforge-api:${jei_version}"
     compileOnly "dev.emi:emi-neoforge:${emi_version}:api"
+    // Storage mods read by the mod-specific Storage Link Upgrades: compile-only as well (those upgrades only exist
+    // when their mod is installed). Tom's Simple Storage needs no dependency: it is read through NeoForge's item handler.
+    compileOnly "maven.modrinth:ae2:${ae2_version}"
+    compileOnly "maven.modrinth:refined-storage:${refined_storage_version}"
+    compileOnly "org.apiguardian:apiguardian-api:1.1.2" // annotations used by the Refined Storage API
 
     // To test the compatibility in the dev client, uncomment ONE of these and run runClient:
     // localRuntime "mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}"

@@ -24,9 +24,14 @@
       "better_auto_crafter:translocation_upgrade_push",
       "better_auto_crafter:dimensional_translocation_upgrade_pull",
       "better_auto_crafter:dimensional_translocation_upgrade_push",
+      "better_auto_crafter:multi_translocation_upgrade_pull",
+      "better_auto_crafter:multi_translocation_upgrade_push",
+      "better_auto_crafter:dimensional_multi_translocation_upgrade_pull",
+      "better_auto_crafter:dimensional_multi_translocation_upgrade_push",
       "better_auto_crafter:stocking_upgrade",
       "better_auto_crafter:stocking_upgrade_tier_2",
-      "better_auto_crafter:stocking_upgrade_tier_3"
+      "better_auto_crafter:stocking_upgrade_tier_3",
+      "better_auto_crafter:storage_link_upgrade"
     ]
   }
 }

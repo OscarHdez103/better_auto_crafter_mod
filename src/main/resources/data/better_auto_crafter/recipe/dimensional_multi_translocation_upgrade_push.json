@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "pattern": [
+    "UPU",
+    "RTR",
+    "UPU"
+  ],
+  "key": {
+    "U": {
+      "item": "better_auto_crafter:dimensional_translocation_upgrade_push"
+    },
+    "P": {
+      "item": "minecraft:ender_pearl"
+    },
+    "R": {
+      "item": "minecraft:redstone"
+    },
+    "T": {
+      "item": "better_auto_crafter:translocator"
+    }
+  },
+  "result": {
+    "id": "better_auto_crafter:dimensional_multi_translocation_upgrade_push",
+    "count": 1
+  }
+}
