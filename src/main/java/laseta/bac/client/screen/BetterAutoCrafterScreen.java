@@ -51,8 +51,14 @@ public class BetterAutoCrafterScreen extends AutoMachineScreen<BetterAutoCrafter
         for (Slot slot : menu.slots) {
             int amount = menu.getAmount(slot);
             if (amount > 1) {
-                graphics.drawString(font, Component.translatable("gui.better_auto_crafter.amount", amount), slot.x, slot.y,
-                        AMOUNT_COLOR, true);
+                final float AMOUNT_SCALE = 0.75F;
+                Component label = Component.translatable("gui.better_auto_crafter.amount", amount);
+                graphics.pose().pushPose();
+                graphics.pose().scale(AMOUNT_SCALE, AMOUNT_SCALE, 1.0F);
+                int textX = (int) ((slot.x + 17) / AMOUNT_SCALE) - font.width(label);  // right-aligned to the slot
+                int textY = (int) ((slot.y + 17) / AMOUNT_SCALE) - font.lineHeight;    // bottom-aligned
+                graphics.drawString(font, label, textX, (int)(slot.y / AMOUNT_SCALE), AMOUNT_COLOR, true);
+                graphics.pose().popPose();
             }
         }
         graphics.pose().popPose();
