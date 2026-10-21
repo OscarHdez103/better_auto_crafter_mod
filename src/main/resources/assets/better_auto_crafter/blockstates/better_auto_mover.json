@@ -1,0 +1,64 @@
+{
+  "variants": {
+    "facing=north,failed=false,powered=false": {
+      "model": "better_auto_crafter:block/better_auto_mover"
+    },
+    "facing=north,failed=true,powered=false": {
+      "model": "better_auto_crafter:block/better_auto_mover_failed"
+    },
+    "facing=north,failed=false,powered=true": {
+      "model": "better_auto_crafter:block/better_auto_mover_powered"
+    },
+    "facing=north,failed=true,powered=true": {
+      "model": "better_auto_crafter:block/better_auto_mover_powered_failed"
+    },
+    "facing=east,failed=false,powered=false": {
+      "model": "better_auto_crafter:block/better_auto_mover",
+      "y": 90
+    },
+    "facing=east,failed=true,powered=false": {
+      "model": "better_auto_crafter:block/better_auto_mover_failed",
+      "y": 90
+    },
+    "facing=east,failed=false,powered=true": {
+      "model": "better_auto_crafter:block/better_auto_mover_powered",
+      "y": 90
+    },
+    "facing=east,failed=true,powered=true": {
+      "model": "better_auto_crafter:block/better_auto_mover_powered_failed",
+      "y": 90
+    },
+    "facing=south,failed=false,powered=false": {
+      "model": "better_auto_crafter:block/better_auto_mover",
+      "y": 180
+    },
+    "facing=south,failed=true,powered=false": {
+      "model": "better_auto_crafter:block/better_auto_mover_failed",
+      "y": 180
+    },
+    "facing=south,failed=false,powered=true": {
+      "model": "better_auto_crafter:block/better_auto_mover_powered",
+      "y": 180
+    },
+    "facing=south,failed=true,powered=true": {
+      "model": "better_auto_crafter:block/better_auto_mover_powered_failed",
+      "y": 180
+    },
+    "facing=west,failed=false,powered=false": {
+      "model": "better_auto_crafter:block/better_auto_mover",
+      "y": 270
+    },
+    "facing=west,failed=true,powered=false": {
+      "model": "better_auto_crafter:block/better_auto_mover_failed",
+      "y": 270
+    },
+    "facing=west,failed=false,powered=true": {
+      "model": "better_auto_crafter:block/better_auto_mover_powered",
+      "y": 270
+    },
+    "facing=west,failed=true,powered=true": {
+      "model": "better_auto_crafter:block/better_auto_mover_powered_failed",
+      "y": 270
+    }
+  }
+}

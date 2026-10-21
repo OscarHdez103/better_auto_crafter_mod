@@ -12,7 +12,7 @@ import net.minecraft.world.item.ItemStack;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * The upgrade slots of the Better Auto Crafter, in order. Every slot accepts one kind of upgrade, up to its own
+ * The upgrade slots of every auto machine, in order. Every slot accepts one kind of upgrade, up to its own
  * stack limit.
  *
  * <p>To add a slot, add a constant <b>at the end</b> (the order is the slot index saved in the world, so never

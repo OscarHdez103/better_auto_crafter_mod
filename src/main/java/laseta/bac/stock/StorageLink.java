@@ -16,7 +16,7 @@ public final class StorageLink {
      * Never loads chunks: an unloaded storage (or one in an unloaded dimension) makes the upgrade inactive until it is
      * loaded again. Works across dimensions: the storage is only read, nothing is moved there.
      */
-    public static StockReading resolve(ItemStack upgrade, ServerLevel crafterLevel) {
+    public static StockReading resolve(ItemStack upgrade, ServerLevel machineLevel) {
         if (upgrade.isEmpty() || !(upgrade.getItem() instanceof StorageLinkUpgradeItem item)) {
             return StockReading.of(UpgradeStatus.EMPTY);
         }
@@ -24,7 +24,7 @@ public final class StorageLink {
         if (link == null) {
             return StockReading.of(UpgradeStatus.NOT_LINKED);
         }
-        ServerLevel targetLevel = crafterLevel.getServer().getLevel(link.dimension());
+        ServerLevel targetLevel = machineLevel.getServer().getLevel(link.dimension());
         if (targetLevel == null) {
             return StockReading.of(UpgradeStatus.DIMENSION_UNAVAILABLE);
         }

@@ -3,11 +3,16 @@ package laseta.bac.gametest;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.google.gson.JsonParser;
+import com.mojang.serialization.DataResult;
+import com.mojang.serialization.JsonOps;
+
 import laseta.bac.BetterAutoCrafter;
-import laseta.bac.block.BetterAutoCrafterBlock;
 import laseta.bac.block.entity.BetterAutoCrafterBlockEntity;
-import laseta.bac.crafting.RedstoneMode;
-import laseta.bac.crafting.TransferPriority;
+import laseta.bac.machine.AutoMachineBlock;
+import laseta.bac.machine.RedstoneMode;
+import laseta.bac.machine.TransferPriority;
+import laseta.bac.recipe.AutoCraftingRecipe;
 import laseta.bac.registry.ModBlocks;
 import laseta.bac.registry.ModItems;
 import laseta.bac.sideconfig.RelativeSide;
@@ -18,6 +23,7 @@ import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.RegistryOps;
 import net.minecraft.world.Container;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -71,7 +77,7 @@ public final class AutoCrafterGameTests {
             assertCount(helper, output, Items.STICK, 4, "sticks in output");
             assertCount(helper, input, Items.OAK_PLANKS, 8, "planks left in input");
             assertGridUntouched(helper, crafter);
-            helper.assertBlockProperty(CRAFTER, BetterAutoCrafterBlock.POWERED, true);
+            helper.assertBlockProperty(CRAFTER, AutoMachineBlock.POWERED, true);
             helper.succeed();
         });
     }
@@ -90,7 +96,7 @@ public final class AutoCrafterGameTests {
         helper.runAfterDelay(SETTLE * 3, () -> assertCount(helper, output, Items.STICK, 4, "sticks while still powered"));
         helper.runAfterDelay(SETTLE * 3 + 1, () -> unpower(helper));
         helper.runAfterDelay(SETTLE * 4, () -> {
-            helper.assertBlockProperty(CRAFTER, BetterAutoCrafterBlock.POWERED, false);
+            helper.assertBlockProperty(CRAFTER, AutoMachineBlock.POWERED, false);
             power(helper);
         });
         helper.runAfterDelay(SETTLE * 5, () -> {
@@ -190,7 +196,7 @@ public final class AutoCrafterGameTests {
     @GameTest(template = TEMPLATE)
     public static void matchNbtOffAcceptsDataButPrefersExact(GameTestHelper helper) {
         BetterAutoCrafterBlockEntity crafter = placeStickCrafter(helper);
-        crafter.getCraftingSettings().setMatchNbt(false);
+        crafter.getSettings().setMatchNbt(false);
         Container input = placeChest(helper, TOP,
                 renamed(new ItemStack(Items.OAK_PLANKS, 3)), new ItemStack(Items.OAK_PLANKS, 1));
         Container output = placeChest(helper, BOTTOM);
@@ -253,7 +259,7 @@ public final class AutoCrafterGameTests {
         configure(crafter, RelativeSide.TOP, SideMode.INPUT);
         configure(crafter, RelativeSide.FRONT, SideMode.OUTPUT);
         configure(crafter, RelativeSide.BOTTOM, SideMode.OUTPUT);
-        crafter.getCraftingSettings().setOutputPriority(TransferPriority.ROUND_ROBIN);
+        crafter.getSettings().setOutputPriority(TransferPriority.ROUND_ROBIN);
 
         power(helper);
         helper.runAfterDelay(SETTLE, () -> unpower(helper));
@@ -277,8 +283,8 @@ public final class AutoCrafterGameTests {
         configure(crafter, RelativeSide.LEFT, SideMode.OUTPUT);
         configure(crafter, RelativeSide.BOTTOM, SideMode.OUTPUT);
         // Without a preference, face order would pick FRONT for input and LEFT for output.
-        crafter.getCraftingSettings().setInputPriority(TransferPriority.TOP);
-        crafter.getCraftingSettings().setOutputPriority(TransferPriority.BOTTOM);
+        crafter.getSettings().setInputPriority(TransferPriority.TOP);
+        crafter.getSettings().setOutputPriority(TransferPriority.BOTTOM);
 
         power(helper);
         helper.runAfterDelay(SETTLE, () -> unpower(helper));
@@ -296,7 +302,7 @@ public final class AutoCrafterGameTests {
     public static void newBlockDefaultsToOff(GameTestHelper helper) {
         helper.setBlock(CRAFTER, ModBlocks.BETTER_AUTO_CRAFTER.get().defaultBlockState());
         BetterAutoCrafterBlockEntity crafter = helper.getBlockEntity(CRAFTER);
-        helper.assertTrue(crafter.getCraftingSettings().getRedstoneMode() == RedstoneMode.OFF, "default redstone mode should be off");
+        helper.assertTrue(crafter.getSettings().getRedstoneMode() == RedstoneMode.OFF, "default redstone mode should be off");
         helper.succeed();
     }
 
@@ -359,18 +365,18 @@ public final class AutoCrafterGameTests {
         // Rising edge at tick 0, failed attempt at tick 1, cleared at tick 11.
         power(helper);
         helper.runAfterDelay(6, () -> {
-            helper.assertBlockProperty(CRAFTER, BetterAutoCrafterBlock.FAILED, true);
-            helper.assertBlockProperty(CRAFTER, BetterAutoCrafterBlock.POWERED, true);
+            helper.assertBlockProperty(CRAFTER, AutoMachineBlock.FAILED, true);
+            helper.assertBlockProperty(CRAFTER, AutoMachineBlock.POWERED, true);
         });
         helper.runAfterDelay(14, () -> {
-            helper.assertBlockProperty(CRAFTER, BetterAutoCrafterBlock.FAILED, false);
+            helper.assertBlockProperty(CRAFTER, AutoMachineBlock.FAILED, false);
             input.setItem(1, new ItemStack(Items.OAK_PLANKS, 1));
             unpower(helper);
         });
         helper.runAfterDelay(16, () -> power(helper));
         helper.runAfterDelay(20, () -> {
             helper.assertTrue(sticks(helper) == 4, "second attempt should craft");
-            helper.assertBlockProperty(CRAFTER, BetterAutoCrafterBlock.FAILED, false);
+            helper.assertBlockProperty(CRAFTER, AutoMachineBlock.FAILED, false);
             helper.succeed();
         });
     }
@@ -379,7 +385,7 @@ public final class AutoCrafterGameTests {
     public static void failedStateStaysWhileConstantlyFailing(GameTestHelper helper) {
         // Constant mode with nothing to craft from: fails every 2 ticks, so it must stay failed.
         BetterAutoCrafterBlockEntity crafter = placeStickCrafter(helper);
-        crafter.getCraftingSettings().setRedstoneMode(RedstoneMode.CONSTANT);
+        crafter.getSettings().setRedstoneMode(RedstoneMode.CONSTANT);
         placeChest(helper, TOP);
         placeChest(helper, BOTTOM);
         configure(crafter, RelativeSide.TOP, SideMode.INPUT);
@@ -387,12 +393,12 @@ public final class AutoCrafterGameTests {
 
         power(helper);
         for (int tick = 4; tick <= 30; tick += 2) {
-            helper.runAfterDelay(tick, () -> helper.assertBlockProperty(CRAFTER, BetterAutoCrafterBlock.FAILED, true));
+            helper.runAfterDelay(tick, () -> helper.assertBlockProperty(CRAFTER, AutoMachineBlock.FAILED, true));
         }
         helper.runAfterDelay(31, () -> unpower(helper));
         // No more attempts once unpowered: cleared within 10 ticks of the last failure.
         helper.runAfterDelay(45, () -> {
-            helper.assertBlockProperty(CRAFTER, BetterAutoCrafterBlock.FAILED, false);
+            helper.assertBlockProperty(CRAFTER, AutoMachineBlock.FAILED, false);
             helper.succeed();
         });
     }
@@ -427,22 +433,111 @@ public final class AutoCrafterGameTests {
     }
 
     // ---------------------------------------------------------------------------------------------------------------
+    // Auto crafting recipes
+    // ---------------------------------------------------------------------------------------------------------------
+
+    @GameTest(template = TEMPLATE)
+    public static void craftsAutoCraftingRecipeWithItsCounts(GameTestHelper helper) {
+        BetterAutoCrafterBlockEntity crafter = placeBetterMaterialCrafter(helper);
+        Container input = placeChest(helper, TOP, new ItemStack(Items.COPPER_INGOT, 17), new ItemStack(Items.REDSTONE, 9),
+                new ItemStack(Items.IRON_INGOT, 11));
+        Container output = placeChest(helper, BOTTOM);
+        configure(crafter, RelativeSide.TOP, SideMode.INPUT);
+        configure(crafter, RelativeSide.BOTTOM, SideMode.OUTPUT);
+
+        helper.assertTrue(crafter.getCraftingResult().is(ModItems.BETTER_MATERIAL.get()), "the grid makes a Better Material");
+        helper.assertTrue(crafter.getAmount(0) == 4 && crafter.getAmount(1) == 2 && crafter.getAmount(4) == 10,
+                "4 copper per corner, 2 redstone per side, 10 iron in the middle");
+        helper.assertTrue(crafter.attemptOperation(), "crafts");
+        assertCount(helper, output, ModItems.BETTER_MATERIAL.get(), 3, "three made");
+        assertCount(helper, input, Items.COPPER_INGOT, 1, "16 copper taken");
+        assertCount(helper, input, Items.REDSTONE, 1, "8 redstone taken");
+        assertCount(helper, input, Items.IRON_INGOT, 1, "10 iron taken");
+        helper.assertTrue(crafter.getTemplate().getStackInSlot(0).getCount() == 1, "the grid is never consumed");
+
+        helper.assertTrue(!crafter.attemptOperation(), "not enough left for a second one");
+        assertCount(helper, input, Items.COPPER_INGOT, 1, "nothing taken by the failed craft");
+        helper.succeed();
+    }
+
+    @GameTest(template = TEMPLATE)
+    public static void autoCraftingRecipeNeedsItsWholeCount(GameTestHelper helper) {
+        BetterAutoCrafterBlockEntity crafter = placeBetterMaterialCrafter(helper);
+        // One copper short: every slot has at least one item, but not the recipe's count.
+        Container input = placeChest(helper, TOP, new ItemStack(Items.COPPER_INGOT, 15), new ItemStack(Items.REDSTONE, 8),
+                new ItemStack(Items.IRON_INGOT, 10));
+        Container output = placeChest(helper, BOTTOM);
+        configure(crafter, RelativeSide.TOP, SideMode.INPUT);
+        configure(crafter, RelativeSide.BOTTOM, SideMode.OUTPUT);
+
+        helper.assertTrue(!crafter.attemptOperation(), "doesn't craft");
+        helper.assertTrue(output.isEmpty(), "nothing made");
+        assertCount(helper, input, Items.COPPER_INGOT, 15, "copper stays");
+        assertCount(helper, input, Items.REDSTONE, 8, "redstone stays");
+        helper.succeed();
+    }
+
+    @GameTest(template = TEMPLATE)
+    public static void autoCraftingRecipeMatchesMovedAndMirroredLayouts(GameTestHelper helper) {
+        AutoCraftingRecipe recipe = parseAutoCraftingRecipe(helper, """
+                {"pattern": ["AB"], "key": {"A": {"item": "minecraft:stone", "count": 2}, "B": {"item": "minecraft:dirt", "count": 5}},
+                 "result": {"id": "minecraft:diamond"}}""").getOrThrow();
+        ItemStack stone = new ItemStack(Items.STONE);
+        ItemStack dirt = new ItemStack(Items.DIRT);
+        ItemStack none = ItemStack.EMPTY;
+
+        int[] moved = recipe.amounts(CraftingInput.of(3, 3, List.of(none, none, none, none, stone, dirt, none, none, none)));
+        helper.assertTrue(moved != null && moved[0] == 2 && moved[1] == 5, "matches anywhere in the grid");
+        int[] mirrored = recipe.amounts(CraftingInput.of(3, 3, List.of(dirt, stone, none, none, none, none, none, none, none)));
+        helper.assertTrue(mirrored != null && mirrored[0] == 5 && mirrored[1] == 2, "matches mirrored, with the counts following the items");
+        helper.assertTrue(recipe.amounts(CraftingInput.of(3, 3, List.of(stone, none, dirt, none, none, none, none, none, none))) == null,
+                "doesn't match with a gap");
+        helper.succeed();
+    }
+
+    @GameTest(template = TEMPLATE)
+    public static void invalidAutoCraftingRecipesAreRejected(GameTestHelper helper) {
+        helper.assertTrue(parseAutoCraftingRecipe(helper, """
+                {"pattern": ["AB"], "key": {"A": {"item": "minecraft:stone"}}, "result": {"id": "minecraft:diamond"}}""").isError(),
+                "symbol missing from the key");
+        helper.assertTrue(parseAutoCraftingRecipe(helper, """
+                {"pattern": ["A"], "key": {"A": {"item": "minecraft:stone"}, "B": {"item": "minecraft:dirt"}},
+                 "result": {"id": "minecraft:diamond"}}""").isError(), "unused key");
+        helper.assertTrue(parseAutoCraftingRecipe(helper, """
+                {"pattern": ["AAAA"], "key": {"A": {"item": "minecraft:stone"}}, "result": {"id": "minecraft:diamond"}}""").isError(),
+                "wider than the crafter's grid");
+        helper.assertTrue(parseAutoCraftingRecipe(helper, """
+                {"pattern": ["A"], "key": {"A": {"item": "minecraft:stone", "count": 0}}, "result": {"id": "minecraft:diamond"}}""").isError(),
+                "count below 1");
+        helper.succeed();
+    }
+
+    @GameTest(template = TEMPLATE)
+    public static void craftingRecipesStillComeFirst(GameTestHelper helper) {
+        BetterAutoCrafterBlockEntity crafter = placeStickCrafter(helper);
+        helper.assertTrue(crafter.getCraftingResult().is(Items.STICK), "a crafting recipe's layout makes its result");
+        helper.assertTrue(crafter.getAmount(1) == 1 && crafter.getAmount(4) == 1 && crafter.getAmount(0) == 0,
+                "one item per used slot");
+        helper.succeed();
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------------------------------------------------------------
 
     /** Crafter facing north in the "on powered" (rising edge) redstone mode, which most tests use. */
     private static BetterAutoCrafterBlockEntity placeCrafter(GameTestHelper helper) {
         helper.setBlock(CRAFTER, ModBlocks.BETTER_AUTO_CRAFTER.get().defaultBlockState()
-                .setValue(BetterAutoCrafterBlock.FACING, Direction.NORTH));
+                .setValue(AutoMachineBlock.FACING, Direction.NORTH));
         BetterAutoCrafterBlockEntity crafter = helper.getBlockEntity(CRAFTER);
-        crafter.getCraftingSettings().setRedstoneMode(RedstoneMode.ON_POWERED);
+        crafter.getSettings().setRedstoneMode(RedstoneMode.ON_POWERED);
         return crafter;
     }
 
     /** Stick crafter with a 40-plank input chest on top and an empty output chest below. */
     private static BetterAutoCrafterBlockEntity placeStickSetup(GameTestHelper helper, RedstoneMode mode) {
         BetterAutoCrafterBlockEntity crafter = placeStickCrafter(helper);
-        crafter.getCraftingSettings().setRedstoneMode(mode);
+        crafter.getSettings().setRedstoneMode(mode);
         placeChest(helper, TOP, new ItemStack(Items.OAK_PLANKS, 40));
         placeChest(helper, BOTTOM);
         configure(crafter, RelativeSide.TOP, SideMode.INPUT);
@@ -463,15 +558,29 @@ public final class AutoCrafterGameTests {
         return crafter;
     }
 
+    /** Crafter with the Better Material's auto crafting layout, one item per slot. */
+    private static BetterAutoCrafterBlockEntity placeBetterMaterialCrafter(GameTestHelper helper) {
+        BetterAutoCrafterBlockEntity crafter = placeCrafter(helper);
+        ItemStack copper = new ItemStack(Items.COPPER_INGOT);
+        ItemStack redstone = new ItemStack(Items.REDSTONE);
+        setGrid(crafter, copper, redstone, copper, redstone, new ItemStack(Items.IRON_INGOT), redstone, copper, redstone, copper);
+        return crafter;
+    }
+
+    private static DataResult<AutoCraftingRecipe> parseAutoCraftingRecipe(GameTestHelper helper, String json) {
+        return new AutoCraftingRecipe.Serializer().codec().codec()
+                .parse(RegistryOps.create(JsonOps.INSTANCE, helper.getLevel().registryAccess()), JsonParser.parseString(json));
+    }
+
     private static void setGrid(BetterAutoCrafterBlockEntity crafter, ItemStack... stacks) {
         for (int i = 0; i < stacks.length; i++) {
-            crafter.getInventory().setStackInSlot(i, stacks[i].copy());
+            crafter.getTemplate().setStackInSlot(i, stacks[i].copy());
         }
     }
 
     private static void assertGridUntouched(GameTestHelper helper, BetterAutoCrafterBlockEntity crafter) {
-        helper.assertTrue(crafter.getInventory().getStackInSlot(1).is(Items.OAK_PLANKS)
-                        && crafter.getInventory().getStackInSlot(4).is(Items.OAK_PLANKS),
+        helper.assertTrue(crafter.getTemplate().getStackInSlot(1).is(Items.OAK_PLANKS)
+                        && crafter.getTemplate().getStackInSlot(4).is(Items.OAK_PLANKS),
                 "the template grid must never be consumed");
     }
 

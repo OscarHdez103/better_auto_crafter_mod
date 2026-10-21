@@ -1,12 +1,12 @@
 {
   "parent": "minecraft:block/cube",
   "textures": {
-    "particle": "better_auto_crafter:block/better_auto_crafter_front",
-    "north": "better_auto_crafter:block/better_auto_crafter_front",
-    "south": "better_auto_crafter:block/better_auto_crafter_side",
-    "east": "better_auto_crafter:block/better_auto_crafter_side",
-    "west": "better_auto_crafter:block/better_auto_crafter_side",
-    "up": "better_auto_crafter:block/better_auto_crafter_top",
-    "down": "better_auto_crafter:block/better_auto_crafter_bottom"
+    "particle": "better_auto_crafter:block/crafter/better_auto_crafter_front",
+    "north": "better_auto_crafter:block/crafter/better_auto_crafter_front",
+    "south": "better_auto_crafter:block/crafter/better_auto_crafter_side",
+    "east": "better_auto_crafter:block/crafter/better_auto_crafter_side",
+    "west": "better_auto_crafter:block/crafter/better_auto_crafter_side",
+    "up": "better_auto_crafter:block/crafter/better_auto_crafter_top",
+    "down": "better_auto_crafter:block/crafter/better_auto_crafter_bottom"
   }
 }

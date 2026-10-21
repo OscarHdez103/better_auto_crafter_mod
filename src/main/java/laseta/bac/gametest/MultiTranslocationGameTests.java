@@ -4,10 +4,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 import laseta.bac.BetterAutoCrafter;
-import laseta.bac.block.BetterAutoCrafterBlock;
 import laseta.bac.block.entity.BetterAutoCrafterBlockEntity;
-import laseta.bac.crafting.RedstoneMode;
-import laseta.bac.crafting.TransferPriority;
+import laseta.bac.machine.AutoMachineBlock;
+import laseta.bac.machine.RedstoneMode;
+import laseta.bac.machine.TransferPriority;
 import laseta.bac.item.MultiTranslocationUpgradeItem;
 import laseta.bac.registry.ModBlocks;
 import laseta.bac.registry.ModDataComponents;
@@ -121,13 +121,13 @@ public final class MultiTranslocationGameTests {
         install(crafter, UpgradeSlotType.TRANSLOCATION_PUSH,
                 linked(helper, ModItems.MULTI_TRANSLOCATION_UPGRADE_PUSH.get(), face(A, Direction.UP), face(B, Direction.UP)));
 
-        helper.assertTrue(crafter.attemptCraft() && crafter.attemptCraft(), "two crafts");
+        helper.assertTrue(crafter.attemptOperation() && crafter.attemptOperation(), "two crafts");
         assertCount(helper, a, Items.STICK, 4, "first craft into the first linked chest");
         assertCount(helper, b, Items.STICK, 4, "round robin: second craft into the second one");
 
         // A face priority has no face to prefer among linked blocks: they are used in link order.
-        crafter.getCraftingSettings().setOutputPriority(TransferPriority.FRONT);
-        helper.assertTrue(crafter.attemptCraft() && crafter.attemptCraft(), "two more crafts");
+        crafter.getSettings().setOutputPriority(TransferPriority.FRONT);
+        helper.assertTrue(crafter.attemptOperation() && crafter.attemptOperation(), "two more crafts");
         assertCount(helper, a, Items.STICK, 12, "link order: both into the first linked chest");
         helper.succeed();
     }
@@ -145,10 +145,10 @@ public final class MultiTranslocationGameTests {
         install(crafter, UpgradeSlotType.TRANSLOCATION_PULL,
                 linked(helper, ModItems.MULTI_TRANSLOCATION_UPGRADE_PULL.get(), face(A, Direction.DOWN)));
 
-        helper.assertTrue(crafter.attemptCraft(), "crafts from the furnace's result slot");
+        helper.assertTrue(crafter.attemptOperation(), "crafts from the furnace's result slot");
         helper.assertTrue(furnace.getItem(2).isEmpty(), "result slot emptied");
         helper.assertTrue(furnace.getItem(0).getCount() == 10, "input slot untouched");
-        helper.assertTrue(!crafter.attemptCraft(), "nothing left on the linked face");
+        helper.assertTrue(!crafter.attemptOperation(), "nothing left on the linked face");
         assertCount(helper, output, Items.STICK, 4, "one craft");
         helper.succeed();
     }
@@ -213,7 +213,7 @@ public final class MultiTranslocationGameTests {
         helper.runAfterDelay(SETTLE, () -> {
             assertCount(helper, local, Items.OAK_PLANKS, 10, "the configured input face is not used as a fallback");
             assertCount(helper, output, Items.STICK, 0, "nothing crafted");
-            helper.assertBlockProperty(CRAFTER, BetterAutoCrafterBlock.FAILED, true);
+            helper.assertBlockProperty(CRAFTER, AutoMachineBlock.FAILED, true);
             helper.succeed();
         });
     }
@@ -228,7 +228,7 @@ public final class MultiTranslocationGameTests {
         install(crafter, UpgradeSlotType.TRANSLOCATION_PUSH, ModItems.MULTI_TRANSLOCATION_UPGRADE_PUSH.get().getDefaultInstance());
 
         helper.assertTrue(crafter.getUpgradeStatus(UpgradeSlotType.TRANSLOCATION_PUSH) == UpgradeStatus.NOT_LINKED, "not linked");
-        helper.assertTrue(!crafter.attemptCraft(), "does not craft");
+        helper.assertTrue(!crafter.attemptOperation(), "does not craft");
         assertCount(helper, local, Items.OAK_PLANKS, 10, "nothing pulled");
         helper.succeed();
     }
@@ -267,7 +267,7 @@ public final class MultiTranslocationGameTests {
         install(crafter, UpgradeSlotType.TRANSLOCATION_PULL, withTargets(ModItems.DIMENSIONAL_MULTI_TRANSLOCATION_UPGRADE_PULL.get(),
                 new LinkedFace(GlobalPos.of(Level.NETHER, remotePos), Direction.UP), face(helper, A, Direction.UP)));
 
-        boolean crafted = crafter.attemptCraft();
+        boolean crafted = crafter.attemptOperation();
         Container remote = (Container) nether.getBlockEntity(remotePos);
         int planks = remote == null ? -1 : remote.countItem(Items.OAK_PLANKS);
         // Clean up the Nether before asserting, so a failure doesn't leave blocks or a forced chunk behind.
@@ -342,7 +342,7 @@ public final class MultiTranslocationGameTests {
 
         helper.assertTrue(crafter.getUpgradeStatus(UpgradeSlotType.TRANSLOCATION_PULL) == UpgradeStatus.PARTIALLY_ACTIVE,
                 "status warns that not every link is used");
-        helper.assertTrue(!crafter.attemptCraft(), "the planks are only behind the link over the limit");
+        helper.assertTrue(!crafter.attemptOperation(), "the planks are only behind the link over the limit");
         assertCount(helper, last, Items.OAK_PLANKS, 10, "nothing pulled through the link over the limit");
         helper.succeed();
     }
@@ -427,12 +427,12 @@ public final class MultiTranslocationGameTests {
 
     private static BetterAutoCrafterBlockEntity placeStickCrafter(GameTestHelper helper) {
         helper.setBlock(CRAFTER, ModBlocks.BETTER_AUTO_CRAFTER.get().defaultBlockState()
-                .setValue(BetterAutoCrafterBlock.FACING, Direction.NORTH));
+                .setValue(AutoMachineBlock.FACING, Direction.NORTH));
         BetterAutoCrafterBlockEntity crafter = helper.getBlockEntity(CRAFTER);
-        crafter.getCraftingSettings().setRedstoneMode(RedstoneMode.ON_POWERED);
+        crafter.getSettings().setRedstoneMode(RedstoneMode.ON_POWERED);
         ItemStack plank = new ItemStack(Items.OAK_PLANKS);
-        crafter.getInventory().setStackInSlot(1, plank.copy());
-        crafter.getInventory().setStackInSlot(4, plank.copy());
+        crafter.getTemplate().setStackInSlot(1, plank.copy());
+        crafter.getTemplate().setStackInSlot(4, plank.copy());
         return crafter;
     }
 

@@ -4,7 +4,7 @@ import java.util.Locale;
 
 import laseta.bac.sideconfig.SideMode;
 
-/** Which faces of the crafter a translocation upgrade moves to the linked Translocator. */
+/** Which faces of the machine a translocation upgrade moves to the linked Translocator. */
 public enum TranslocationMode {
     /** Input faces (pulling ingredients). */
     PULL(SideMode.INPUT),

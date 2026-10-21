@@ -3,7 +3,7 @@ package laseta.bac.upgrade;
 import java.util.ArrayList;
 import java.util.List;
 
-import laseta.bac.crafting.InventoryFace;
+import laseta.bac.machine.InventoryFace;
 import laseta.bac.item.MultiTranslocationUpgradeItem;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
@@ -13,15 +13,15 @@ import net.neoforged.neoforge.items.IItemHandler;
 /**
  * Resolves an installed Multi Translocation Upgrade to the inventories of its linked blocks. Server only.
  *
- * <p>Unlike a single Translocator, one unusable block doesn't stop the crafter: it keeps working with the linked blocks
+ * <p>Unlike a single Translocator, one unusable block doesn't stop the machine: it keeps working with the linked blocks
  * that are there (like a pipe network skips a missing machine), and reports {@link UpgradeStatus#PARTIALLY_ACTIVE}.
- * Only when none of them can be used does the upgrade stop crafting, with the reason of the first one.</p>
+ * Only when none of them can be used does the upgrade stop the machine, with the reason of the first one.</p>
  *
  * <p>Links beyond {@link MultiTranslocationUpgradeItem#getMaxTargets()} (made before the limit was lowered in the
  * config) are not used either, which also makes the upgrade PARTIALLY_ACTIVE.</p>
  */
 public final class MultiTranslocation {
-    /** @param faces the usable linked inventories, in link order; empty unless the status lets the crafter work */
+    /** @param faces the usable linked inventories, in link order; empty unless the status lets the machine work */
     public record Result(UpgradeStatus status, List<InventoryFace> faces) {
         private static Result of(UpgradeStatus status) {
             return new Result(status, List.of());
@@ -32,7 +32,7 @@ public final class MultiTranslocation {
     }
 
     /** Never loads chunks: blocks in unloaded chunks (or dimensions) are skipped until they are loaded again. */
-    public static Result resolve(ItemStack upgrade, ServerLevel crafterLevel) {
+    public static Result resolve(ItemStack upgrade, ServerLevel machineLevel) {
         if (upgrade.isEmpty() || !(upgrade.getItem() instanceof MultiTranslocationUpgradeItem item)) {
             return Result.of(UpgradeStatus.EMPTY);
         }
@@ -46,8 +46,8 @@ public final class MultiTranslocation {
         for (LinkedFace target : targets.subList(0, usable)) {
             UpgradeStatus problem = null;
             IItemHandler handler = null;
-            ServerLevel targetLevel = crafterLevel.getServer().getLevel(target.pos().dimension());
-            if (!item.isDimensional() && !target.pos().dimension().equals(crafterLevel.dimension())) {
+            ServerLevel targetLevel = machineLevel.getServer().getLevel(target.pos().dimension());
+            if (!item.isDimensional() && !target.pos().dimension().equals(machineLevel.dimension())) {
                 problem = UpgradeStatus.WRONG_DIMENSION;
             } else if (targetLevel == null) {
                 problem = UpgradeStatus.DIMENSION_UNAVAILABLE;

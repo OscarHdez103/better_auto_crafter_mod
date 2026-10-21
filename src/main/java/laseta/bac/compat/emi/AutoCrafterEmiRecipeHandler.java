@@ -29,8 +29,9 @@ import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 
 /**
- * EMI fill button for crafting recipes. Places whatever ingredients the player has; slots it can't fill are
- * highlighted in red but the button still works. It is only disabled when nothing at all can be placed.
+ * EMI fill button for crafting and auto crafting recipes. Places whatever ingredients the player has (one of each: the
+ * grid is only the recipe's layout); slots it can't fill are highlighted in red but the button still works. It is only
+ * disabled when nothing at all can be placed.
  */
 public class AutoCrafterEmiRecipeHandler implements EmiRecipeHandler<BetterAutoCrafterMenu> {
     /** Same colour EMI uses for missing ingredients on its own crafting handlers. */
@@ -50,7 +51,7 @@ public class AutoCrafterEmiRecipeHandler implements EmiRecipeHandler<BetterAutoC
 
     @Override
     public boolean supportsRecipe(EmiRecipe recipe) {
-        return recipe.getCategory() == VanillaEmiRecipeCategories.CRAFTING
+        return (recipe.getCategory() == VanillaEmiRecipeCategories.CRAFTING || recipe.getCategory() == EmiCompat.AUTO_CRAFTING)
                 && recipe.getInputs().size() <= BetterAutoCrafterBlockEntity.GRID_SIZE;
     }
 
@@ -110,7 +111,10 @@ public class AutoCrafterEmiRecipeHandler implements EmiRecipeHandler<BetterAutoC
         return context.getScreenHandler().planFill(minecraft.player, wanted(recipe), false);
     }
 
-    /** EMI crafting recipes list their inputs in 3x3 grid order (shaped recipes are padded with empty slots). */
+    /**
+     * EMI crafting recipes list their inputs in 3x3 grid order (shaped recipes are padded with empty slots), and so do
+     * auto crafting recipes.
+     */
     private static List<List<ItemStack>> wanted(EmiRecipe recipe) {
         return recipe.getInputs().stream()
                 .map(ingredient -> RecipeFillHelper.candidates(ingredient.getEmiStacks().stream().map(EmiStack::getItemStack)))

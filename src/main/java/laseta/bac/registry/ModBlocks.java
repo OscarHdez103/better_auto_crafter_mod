@@ -2,6 +2,7 @@ package laseta.bac.registry;
 
 import laseta.bac.BetterAutoCrafter;
 import laseta.bac.block.BetterAutoCrafterBlock;
+import laseta.bac.block.BetterAutoMoverBlock;
 import laseta.bac.block.TranslocatorBlock;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
@@ -17,6 +18,15 @@ public final class ModBlocks {
     public static final DeferredBlock<BetterAutoCrafterBlock> BETTER_AUTO_CRAFTER = BLOCKS.registerBlock(
             "better_auto_crafter",
             BetterAutoCrafterBlock::new,
+            BlockBehaviour.Properties.of()
+                    .mapColor(MapColor.WOOD)
+                    .instrument(NoteBlockInstrument.BASS)
+                    .strength(2.5F)
+                    .sound(SoundType.WOOD));
+
+    public static final DeferredBlock<BetterAutoMoverBlock> BETTER_AUTO_MOVER = BLOCKS.registerBlock(
+            "better_auto_mover",
+            BetterAutoMoverBlock::new,
             BlockBehaviour.Properties.of()
                     .mapColor(MapColor.WOOD)
                     .instrument(NoteBlockInstrument.BASS)

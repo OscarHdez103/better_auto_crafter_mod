@@ -1,12 +1,12 @@
 {
   "parent": "minecraft:block/cube",
   "textures": {
-    "particle": "better_auto_crafter:block/better_auto_crafter_front_powered_failed",
-    "north": "better_auto_crafter:block/better_auto_crafter_front_powered_failed",
-    "south": "better_auto_crafter:block/better_auto_crafter_side_powered_failed",
-    "east": "better_auto_crafter:block/better_auto_crafter_side_powered_failed",
-    "west": "better_auto_crafter:block/better_auto_crafter_side_powered_failed",
-    "up": "better_auto_crafter:block/better_auto_crafter_top_powered_failed",
-    "down": "better_auto_crafter:block/better_auto_crafter_bottom_powered_failed"
+    "particle": "better_auto_crafter:block/crafter/better_auto_crafter_front_powered_failed",
+    "north": "better_auto_crafter:block/crafter/better_auto_crafter_front_powered_failed",
+    "south": "better_auto_crafter:block/crafter/better_auto_crafter_side_powered_failed",
+    "east": "better_auto_crafter:block/crafter/better_auto_crafter_side_powered_failed",
+    "west": "better_auto_crafter:block/crafter/better_auto_crafter_side_powered_failed",
+    "up": "better_auto_crafter:block/crafter/better_auto_crafter_top_powered_failed",
+    "down": "better_auto_crafter:block/crafter/better_auto_crafter_bottom_powered_failed"
   }
 }

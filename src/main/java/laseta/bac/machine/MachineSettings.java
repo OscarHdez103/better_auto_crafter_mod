@@ -1,13 +1,14 @@
-package laseta.bac.crafting;
+package laseta.bac.machine;
 
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.inventory.ContainerData;
 
 /**
- * Player-configurable settings for crafting from neighbouring inventories, plus the round robin positions.
+ * Player-configurable settings of an auto machine (how it pulls from and pushes into inventories, and when it runs),
+ * plus the round robin positions. Saved under the key "crafting_settings", the name from before there were other machines.
  * Owned by a block entity; {@code onChanged} is called whenever something that must be saved changes.
  */
-public class CraftingSettings {
+public class MachineSettings {
     // Menu data slot indices (see asContainerData)
     public static final int DATA_MATCH_NBT = 0;
     public static final int DATA_INPUT_PRIORITY = 1;
@@ -25,7 +26,7 @@ public class CraftingSettings {
     private int inputCursor;
     private int outputCursor;
 
-    public CraftingSettings(Runnable onChanged) {
+    public MachineSettings(Runnable onChanged) {
         this.onChanged = onChanged;
     }
 
@@ -81,7 +82,7 @@ public class CraftingSettings {
         return outputCursor;
     }
 
-    /** Called after every successful craft so round robin starts at the next face. */
+    /** Called after every successful operation so round robin starts at the next face. */
     public void advanceRoundRobin() {
         boolean changed = false;
         if (inputPriority == TransferPriority.ROUND_ROBIN) {

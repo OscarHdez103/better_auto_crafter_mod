@@ -6,6 +6,7 @@ import java.util.List;
 
 import laseta.bac.BetterAutoCrafter;
 import laseta.bac.compat.StorageLinkIntegrations;
+import laseta.bac.item.CraftingComponentItem;
 import laseta.bac.item.MultiTranslocationUpgradeItem;
 import laseta.bac.item.StockingUpgradeItem;
 import laseta.bac.item.StorageLinkUpgradeItem;
@@ -23,7 +24,12 @@ public final class ModItems {
     public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(BetterAutoCrafter.MODID);
 
     public static final DeferredItem<BlockItem> BETTER_AUTO_CRAFTER = ITEMS.registerSimpleBlockItem(ModBlocks.BETTER_AUTO_CRAFTER);
+    public static final DeferredItem<BlockItem> BETTER_AUTO_MOVER = ITEMS.registerSimpleBlockItem(ModBlocks.BETTER_AUTO_MOVER);
     public static final DeferredItem<BlockItem> TRANSLOCATOR = ITEMS.registerSimpleBlockItem(ModBlocks.TRANSLOCATOR);
+
+    /** Only made by the Better Auto Crafter (an auto crafting recipe); goes into the recipes of the mod's machines. */
+    public static final DeferredItem<CraftingComponentItem> BETTER_MATERIAL = ITEMS.registerItem("better_material",
+            CraftingComponentItem::new, new Item.Properties());
 
     public static final DeferredItem<TranslocationUpgradeItem> TRANSLOCATION_UPGRADE_PULL =
             registerTranslocationUpgrade("translocation_upgrade_pull", TranslocationMode.PULL, false);

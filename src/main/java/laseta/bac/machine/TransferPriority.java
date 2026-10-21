@@ -1,4 +1,4 @@
-package laseta.bac.crafting;
+package laseta.bac.machine;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -11,11 +11,11 @@ import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * Which face's inventory is used first when pulling ingredients (input) or pushing the result (output).
+ * Which face's inventory is used first when pulling items (input) or pushing them (output).
  * After the preferred face, the other faces follow in {@link RelativeSide} order.
  */
 public enum TransferPriority {
-    /** Every successful craft starts one face further, spreading the load over all inventories. */
+    /** Every successful operation starts one face further, spreading the load over all inventories. */
     ROUND_ROBIN(null),
     FRONT(RelativeSide.FRONT),
     BACK(RelativeSide.BACK),
@@ -34,10 +34,10 @@ public enum TransferPriority {
     }
 
     /**
-     * Orders the faces (given in {@link RelativeSide} order) for one craft.
+     * Orders the faces (given in {@link RelativeSide} order) for one operation.
      *
      * @param sideOf           face of each element
-     * @param roundRobinCursor number of successful crafts so far (only used by {@link #ROUND_ROBIN})
+     * @param roundRobinCursor number of successful operations so far (only used by {@link #ROUND_ROBIN})
      */
     public <T> List<T> order(List<T> faces, Function<T, RelativeSide> sideOf, int roundRobinCursor) {
         List<T> ordered = new ArrayList<>(faces);

@@ -9,6 +9,7 @@ import laseta.bac.registry.ModBlocks;
 import laseta.bac.registry.ModCreativeTabs;
 import laseta.bac.registry.ModDataComponents;
 import laseta.bac.registry.ModRecipeSerializers;
+import laseta.bac.registry.ModRecipeTypes;
 import laseta.bac.registry.ModItems;
 import laseta.bac.registry.ModMenuTypes;
 import net.neoforged.bus.api.IEventBus;
@@ -28,7 +29,8 @@ public class BetterAutoCrafter {
         ModMenuTypes.register(modEventBus);
         ModDataComponents.register(modEventBus);
         ModRecipeSerializers.register(modEventBus);
+        ModRecipeTypes.register(modEventBus);
         ModCreativeTabs.register(modEventBus);
-        modContainer.registerConfig(ModConfig.Type.SERVER, ServerConfig.SPEC);
+        modContainer.registerConfig(ModConfig.Type.COMMON, CommonConfig.SPEC);
     }
 }

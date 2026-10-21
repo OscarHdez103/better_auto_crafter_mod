@@ -1,0 +1,12 @@
+{
+  "parent": "minecraft:block/cube",
+  "textures": {
+    "particle": "better_auto_crafter:block/mover/better_auto_mover_front",
+    "north": "better_auto_crafter:block/mover/better_auto_mover_front",
+    "south": "better_auto_crafter:block/mover/better_auto_mover_side",
+    "east": "better_auto_crafter:block/mover/better_auto_mover_side",
+    "west": "better_auto_crafter:block/mover/better_auto_mover_side",
+    "up": "better_auto_crafter:block/mover/better_auto_mover_top",
+    "down": "better_auto_crafter:block/mover/better_auto_mover_bottom"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "pattern": [
+    "BEB",
+    "HDH",
+    "BRB"
+  ],
+  "key": {
+    "B": {
+      "item": "better_auto_crafter:better_material"
+    },
+    "H": {
+      "item": "minecraft:hopper"
+    },
+    "D": {
+      "item": "minecraft:dropper"
+    },
+    "R": {
+      "item": "minecraft:redstone"
+    },
+    "E": {
+      "item": "minecraft:ender_pearl"
+    }
+  },
+  "result": {
+    "id": "better_auto_crafter:better_auto_mover",
+    "count": 1
+  }
+}

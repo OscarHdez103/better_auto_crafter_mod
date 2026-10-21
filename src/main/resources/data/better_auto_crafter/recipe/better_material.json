@@ -1,0 +1,26 @@
+{
+  "type": "better_auto_crafter:auto_crafting",
+  "pattern": [
+    "CIC",
+    "IRI",
+    "CIC"
+  ],
+  "key": {
+    "C": {
+      "tag": "c:ingots/copper",
+      "count": 6
+    },
+    "R": {
+      "item": "minecraft:redstone_torch",
+      "count": 5
+    },
+    "I": {
+      "tag": "c:ingots/iron",
+      "count": 2
+    }
+  },
+  "result": {
+    "id": "better_auto_crafter:better_material",
+    "count": 3
+  }
+}

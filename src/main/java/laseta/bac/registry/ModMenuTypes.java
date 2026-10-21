@@ -4,6 +4,7 @@ import java.util.function.Supplier;
 
 import laseta.bac.BetterAutoCrafter;
 import laseta.bac.menu.BetterAutoCrafterMenu;
+import laseta.bac.menu.BetterAutoMoverMenu;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.inventory.MenuType;
 import net.neoforged.bus.api.IEventBus;
@@ -17,6 +18,10 @@ public final class ModMenuTypes {
     public static final Supplier<MenuType<BetterAutoCrafterMenu>> BETTER_AUTO_CRAFTER =
             MENU_TYPES.register("better_auto_crafter",
                     () -> IMenuTypeExtension.create(BetterAutoCrafterMenu::new));
+
+    public static final Supplier<MenuType<BetterAutoMoverMenu>> BETTER_AUTO_MOVER =
+            MENU_TYPES.register("better_auto_mover",
+                    () -> IMenuTypeExtension.create(BetterAutoMoverMenu::new));
 
     private ModMenuTypes() {
     }

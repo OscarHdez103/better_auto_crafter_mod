@@ -6,7 +6,7 @@ import net.minecraft.network.chat.Component;
 
 /**
  * State of an installed upgrade, shown in the upgrades tab. Every state except ACTIVE, PARTIALLY_ACTIVE (and EMPTY)
- * stops crafting.
+ * stops the machine.
  */
 public enum UpgradeStatus {
     EMPTY,
@@ -20,12 +20,12 @@ public enum UpgradeStatus {
     NETWORK_OFFLINE,
     /** A block linked by a Multi Translocation Upgrade has no inventory on the linked face (anymore). */
     INVENTORY_MISSING,
-    /** Some of the blocks linked by a Multi Translocation Upgrade can't be used; the crafter works with the others. */
+    /** Some of the blocks linked by a Multi Translocation Upgrade can't be used; the machine works with the others. */
     PARTIALLY_ACTIVE;
 
     private static final UpgradeStatus[] VALUES = values();
 
-    /** The upgrade doesn't work, so the crafter doesn't craft. */
+    /** The upgrade doesn't work, so the machine doesn't run. */
     public boolean isProblem() {
         return this != EMPTY && this != ACTIVE && this != PARTIALLY_ACTIVE;
     }

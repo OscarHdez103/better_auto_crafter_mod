@@ -43,10 +43,6 @@ public enum SideMode {
         return Component.translatable("gui.better_auto_crafter.side_mode." + getSerializedName());
     }
 
-    public Component getDescription() {
-        return Component.translatable("gui.better_auto_crafter.side_mode." + getSerializedName() + ".desc");
-    }
-
     public SideMode next() {
         return VALUES[(ordinal() + 1) % VALUES.length];
     }

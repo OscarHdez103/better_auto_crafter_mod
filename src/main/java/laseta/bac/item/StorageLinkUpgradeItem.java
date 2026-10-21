@@ -21,7 +21,7 @@ import org.jetbrains.annotations.NotNull;
 
 /**
  * Upgrade that makes the stocking upgrades count the result in a linked storage instead of in each output inventory.
- * Useful when the outputs feed a storage network (e.g. through an interface) whose contents the crafter can't see.
+ * Useful when the outputs feed a storage network (e.g. through an interface) whose contents the machine can't see.
  *
  * <p>What it can be linked to and how it reads the stock comes from its {@link StockReader}: the basic upgrade
  * reads any inventory, the mod-specific ones a storage network through its controller.</p>

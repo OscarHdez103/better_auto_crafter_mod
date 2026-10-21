@@ -4,10 +4,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 import laseta.bac.BetterAutoCrafter;
-import laseta.bac.block.BetterAutoCrafterBlock;
 import laseta.bac.block.TranslocatorBlock;
 import laseta.bac.block.entity.BetterAutoCrafterBlockEntity;
-import laseta.bac.crafting.RedstoneMode;
+import laseta.bac.machine.AutoMachineBlock;
+import laseta.bac.machine.RedstoneMode;
 import laseta.bac.item.TranslocationUpgradeItem;
 import laseta.bac.menu.BetterAutoCrafterMenu;
 import laseta.bac.registry.ModBlocks;
@@ -144,7 +144,7 @@ public final class TranslocationGameTests {
         helper.runAfterDelay(SETTLE, () -> {
             assertCount(helper, local, Items.OAK_PLANKS, 10, "local planks untouched");
             assertCount(helper, output, Items.STICK, 0, "nothing crafted");
-            helper.assertBlockProperty(CRAFTER, BetterAutoCrafterBlock.FAILED, true);
+            helper.assertBlockProperty(CRAFTER, AutoMachineBlock.FAILED, true);
             helper.succeed();
         });
     }
@@ -408,7 +408,7 @@ public final class TranslocationGameTests {
         helper.runAfterDelay(SETTLE, () -> {
             assertCount(helper, input, Items.OAK_PLANKS, 10, "nothing pulled");
             assertCount(helper, output, Items.STICK, 2, "no sticks added");
-            helper.assertBlockProperty(CRAFTER, BetterAutoCrafterBlock.FAILED, true);
+            helper.assertBlockProperty(CRAFTER, AutoMachineBlock.FAILED, true);
             helper.succeed();
         });
     }
@@ -504,12 +504,12 @@ public final class TranslocationGameTests {
 
     private static BetterAutoCrafterBlockEntity placeStickCrafter(GameTestHelper helper) {
         helper.setBlock(CRAFTER, ModBlocks.BETTER_AUTO_CRAFTER.get().defaultBlockState()
-                .setValue(BetterAutoCrafterBlock.FACING, Direction.NORTH));
+                .setValue(AutoMachineBlock.FACING, Direction.NORTH));
         BetterAutoCrafterBlockEntity crafter = helper.getBlockEntity(CRAFTER);
-        crafter.getCraftingSettings().setRedstoneMode(RedstoneMode.ON_POWERED);
+        crafter.getSettings().setRedstoneMode(RedstoneMode.ON_POWERED);
         ItemStack plank = new ItemStack(Items.OAK_PLANKS);
-        crafter.getInventory().setStackInSlot(1, plank.copy());
-        crafter.getInventory().setStackInSlot(4, plank.copy());
+        crafter.getTemplate().setStackInSlot(1, plank.copy());
+        crafter.getTemplate().setStackInSlot(4, plank.copy());
         return crafter;
     }
 

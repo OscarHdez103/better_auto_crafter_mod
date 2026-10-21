@@ -1,4 +1,6 @@
 {
   "replace": false,
-  "values": [ "better_auto_crafter:better_auto_crafter" ]
+  "values": [
+    "better_auto_crafter:better_auto_crafter"
+  ]
 }

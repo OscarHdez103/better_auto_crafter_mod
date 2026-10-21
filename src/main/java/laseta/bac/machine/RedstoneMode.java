@@ -1,31 +1,31 @@
-package laseta.bac.crafting;
+package laseta.bac.machine;
 
 import java.util.Locale;
 
 import net.minecraft.network.chat.Component;
 
-/** When the block crafts, depending on its redstone signal. */
+/** When a machine runs, depending on its redstone signal. */
 public enum RedstoneMode {
-    /** Never crafts. */
+    /** Never runs. */
     OFF,
-    /** Crafts once every time the signal turns on (rising edge). */
+    /** Runs once every time the signal turns on (rising edge). */
     ON_POWERED,
-    /** Crafts every {@link #CONTINUOUS_INTERVAL} ticks while powered. */
+    /** Runs every {@link #CONTINUOUS_INTERVAL} ticks while powered. */
     CONSTANT,
-    /** Crafts every {@link #CONTINUOUS_INTERVAL} ticks while NOT powered. */
+    /** Runs every {@link #CONTINUOUS_INTERVAL} ticks while NOT powered. */
     INVERTED;
 
-    /** Game ticks between craft attempts in the continuous modes. */
+    /** Game ticks between attempts in the continuous modes. */
     public static final int CONTINUOUS_INTERVAL = 2;
 
     private static final RedstoneMode[] VALUES = values();
 
-    /** True for the modes that keep crafting on a timer instead of reacting to a signal change. */
+    /** True for the modes that keep running on a timer instead of reacting to a signal change. */
     public boolean isContinuous() {
         return this == CONSTANT || this == INVERTED;
     }
 
-    /** For continuous modes: whether to craft right now given the current signal. */
+    /** For continuous modes: whether to run right now given the current signal. */
     public boolean shouldRunContinuously(boolean powered) {
         return (this == CONSTANT && powered) || (this == INVERTED && !powered);
     }
@@ -36,10 +36,6 @@ public enum RedstoneMode {
 
     public Component getDisplayName() {
         return Component.translatable("gui.better_auto_crafter.redstone_mode." + getSerializedName());
-    }
-
-    public Component getDescription() {
-        return Component.translatable("gui.better_auto_crafter.redstone_mode." + getSerializedName() + ".desc");
     }
 
     public RedstoneMode next() {

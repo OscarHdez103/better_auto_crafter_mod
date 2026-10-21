@@ -13,7 +13,7 @@ import net.minecraft.world.item.context.UseOnContext;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * Upgrade that stops the crafter from crafting into an output inventory that already holds enough of the result.
+ * Upgrade that stops a machine from pushing into an output inventory that already holds enough of what it pushes.
  * Every installed item adds {@link #getStockPerItem()} to that limit; higher tiers are crafted from 8 of the previous
  * one, so they count 8 times as much.
  */

@@ -2,10 +2,10 @@ package laseta.bac.client.screen.widget;
 
 import java.util.List;
 
-import laseta.bac.crafting.RedstoneMode;
-import laseta.bac.crafting.TransferPriority;
 import laseta.bac.item.MultiTranslocationUpgradeItem;
-import laseta.bac.menu.BetterAutoCrafterMenu;
+import laseta.bac.machine.AutoMachineMenu;
+import laseta.bac.machine.RedstoneMode;
+import laseta.bac.machine.TransferPriority;
 import laseta.bac.sideconfig.RelativeSide;
 import laseta.bac.sideconfig.SideMode;
 import laseta.bac.upgrade.UpgradeSlotType;
@@ -20,13 +20,11 @@ import net.minecraft.world.item.Items;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * Crafting settings as a compact 2x2 grid of icon buttons (Match NBT, Redstone, Input First, Output First).
+ * Machine settings as a compact 2x2 grid of icon buttons (Match NBT, Redstone, Input First, Output First).
  * Each icon shows the current value; the tooltip names the setting and explains the value.
  * Left-click selects the next value, right-click the previous one.
  */
-public class CraftingSettingsTab extends SideTab {
-    private static final Component TITLE = Component.translatable("gui.better_auto_crafter.crafting_settings");
-    private static final Component DESCRIPTION = Component.translatable("gui.better_auto_crafter.crafting_settings.description");
+public class MachineSettingsTab extends SideTab {
     private static final Palette PALETTE = new Palette(0xFF2A0E0C, 0xFF9A3B33, 0xFFC9675E, 0xFF6B241F);
 
     private static final int BUTTON_SIZE = 22;
@@ -71,7 +69,8 @@ public class CraftingSettingsTab extends SideTab {
             {null, RelativeSide.BOTTOM, RelativeSide.BACK},
     };
 
-    private final BetterAutoCrafterMenu menu;
+    private final AutoMachineMenu menu;
+    private final MachineText text;
     private final ItemStack nameTag = new ItemStack(Items.NAME_TAG);
     private final ItemStack barrier = new ItemStack(Items.BARRIER);
     private final ItemStack repeater = new ItemStack(Items.REPEATER);
@@ -79,12 +78,13 @@ public class CraftingSettingsTab extends SideTab {
     private final ItemStack redstoneTorch = new ItemStack(Items.REDSTONE_TORCH);
     private final ItemStack comparator = new ItemStack(Items.COMPARATOR);
 
-    public CraftingSettingsTab(BetterAutoCrafterMenu menu, Font font) {
+    public MachineSettingsTab(AutoMachineMenu menu, MachineText text, Font font) {
         // Same content width as the side configuration tab, so the tab column never gets wider (EMI hides its
         // whole panel when the free space beside the GUI gets too narrow).
-        super(TITLE, DESCRIPTION, PALETTE, font, SideConfigTab.CONTENT_WIDTH,
+        super(text.get("settings"), text.get("settings.description"), PALETTE, font, SideConfigTab.CONTENT_WIDTH,
                 BUTTON_SIZE * rows() + BUTTON_GAP * (rows() - 1));
         this.menu = menu;
+        this.text = text;
     }
 
     private static int rows() {
@@ -237,8 +237,8 @@ public class CraftingSettingsTab extends SideTab {
 
     private Component explanation(Setting setting) {
         return switch (setting) {
-            case MATCH_NBT -> Component.translatable("gui.better_auto_crafter.setting.match_nbt." + (menu.isMatchNbt() ? "on" : "off"));
-            case REDSTONE -> menu.getRedstoneMode().getDescription();
+            case MATCH_NBT -> text.get("setting.match_nbt." + (menu.isMatchNbt() ? "on" : "off"));
+            case REDSTONE -> text.get("redstone_mode." + menu.getRedstoneMode().getSerializedName() + ".desc");
             case INPUT_PRIORITY -> priorityExplanation(menu.getInputPriority(), "input", UpgradeSlotType.TRANSLOCATION_PULL);
             case OUTPUT_PRIORITY -> priorityExplanation(menu.getOutputPriority(), "output", UpgradeSlotType.TRANSLOCATION_PUSH);
         };
@@ -247,12 +247,11 @@ public class CraftingSettingsTab extends SideTab {
     /** With a multi translocation upgrade there are no faces: round robin goes through the linked blocks, otherwise their link order is used. */
     private Component priorityExplanation(TransferPriority priority, String direction, UpgradeSlotType upgradeSlot) {
         if (menu.getUpgradeSlot(upgradeSlot).getItem().getItem() instanceof MultiTranslocationUpgradeItem) {
-            return Component.translatable("gui.better_auto_crafter.priority." + direction + ".linked."
-                    + (priority.getPreferredSide() == null ? "round_robin" : "in_order"));
+            return text.get("priority." + direction + ".linked." + (priority.getPreferredSide() == null ? "round_robin" : "in_order"));
         }
         return priority.getPreferredSide() == null
-                ? Component.translatable("gui.better_auto_crafter.priority." + direction + ".round_robin")
-                : Component.translatable("gui.better_auto_crafter.priority." + direction + ".face", priority.getDisplayName());
+                ? text.get("priority." + direction + ".round_robin")
+                : text.get("priority." + direction + ".face", priority.getDisplayName());
     }
 
     @Nullable
@@ -280,16 +279,16 @@ public class CraftingSettingsTab extends SideTab {
         }
         boolean previous = button == 1;
         int buttonId = switch (setting) {
-            case MATCH_NBT -> BetterAutoCrafterMenu.BUTTON_TOGGLE_MATCH_NBT;
+            case MATCH_NBT -> AutoMachineMenu.BUTTON_TOGGLE_MATCH_NBT;
             case REDSTONE -> previous
-                    ? BetterAutoCrafterMenu.BUTTON_REDSTONE_MODE_PREVIOUS
-                    : BetterAutoCrafterMenu.BUTTON_REDSTONE_MODE_NEXT;
+                    ? AutoMachineMenu.BUTTON_REDSTONE_MODE_PREVIOUS
+                    : AutoMachineMenu.BUTTON_REDSTONE_MODE_NEXT;
             case INPUT_PRIORITY -> previous
-                    ? BetterAutoCrafterMenu.BUTTON_INPUT_PRIORITY_PREVIOUS
-                    : BetterAutoCrafterMenu.BUTTON_INPUT_PRIORITY_NEXT;
+                    ? AutoMachineMenu.BUTTON_INPUT_PRIORITY_PREVIOUS
+                    : AutoMachineMenu.BUTTON_INPUT_PRIORITY_NEXT;
             case OUTPUT_PRIORITY -> previous
-                    ? BetterAutoCrafterMenu.BUTTON_OUTPUT_PRIORITY_PREVIOUS
-                    : BetterAutoCrafterMenu.BUTTON_OUTPUT_PRIORITY_NEXT;
+                    ? AutoMachineMenu.BUTTON_OUTPUT_PRIORITY_PREVIOUS
+                    : AutoMachineMenu.BUTTON_OUTPUT_PRIORITY_NEXT;
         };
         sendMenuButton(menu, buttonId);
         return true;

@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Map;
 
 import laseta.bac.item.MultiTranslocationUpgradeItem;
-import laseta.bac.menu.BetterAutoCrafterMenu;
+import laseta.bac.machine.AutoMachineMenu;
 import laseta.bac.sideconfig.RelativeSide;
 import laseta.bac.sideconfig.SideMode;
 import laseta.bac.upgrade.UpgradeSlotType;
@@ -34,7 +34,6 @@ import org.jetbrains.annotations.Nullable;
  */
 public class SideConfigTab extends SideTab {
     private static final Component TITLE = Component.translatable("gui.better_auto_crafter.side_config");
-    private static final Component DESCRIPTION = Component.translatable("gui.better_auto_crafter.side_config.description");
     private static final Palette PALETTE = new Palette(0xFF0F1B2A, 0xFF3C6C9E, 0xFF6F9DCC, 0xFF2A4D73);
 
     private static final int BUTTON_SIZE = 18;
@@ -56,16 +55,18 @@ public class SideConfigTab extends SideTab {
     private static final int HOVER_OVERLAY = 0x80FFFFFF;
     private static final int UNUSED_OVERLAY = 0xA0202020;
 
-    private final BetterAutoCrafterMenu menu;
+    private final AutoMachineMenu menu;
+    private final MachineText text;
     private final Direction facing;
     private final Map<RelativeSide, TextureAtlasSprite> faceSprites = new EnumMap<>(RelativeSide.class);
 
     /**
      * @param blockState state whose model provides the face textures
      */
-    public SideConfigTab(BetterAutoCrafterMenu menu, BlockState blockState, Direction facing, Font font) {
-        super(TITLE, DESCRIPTION, PALETTE, font, CONTENT_WIDTH, GRID_SIZE);
+    public SideConfigTab(AutoMachineMenu menu, MachineText text, BlockState blockState, Direction facing, Font font) {
+        super(TITLE, text.get("side_config.description"), PALETTE, font, CONTENT_WIDTH, GRID_SIZE);
         this.menu = menu;
+        this.text = text;
         this.facing = facing;
         for (RelativeSide side : RelativeSide.values()) {
             faceSprites.put(side, findFaceSprite(blockState, side.toDirection(facing)));
@@ -177,7 +178,7 @@ public class SideConfigTab extends SideTab {
                 Component.translatable("gui.better_auto_crafter.side_config.face", side.getDisplayName(),
                         Component.translatable("gui.better_auto_crafter.direction." + direction.getSerializedName())),
                 mode.getDisplayName().copy().withStyle(style -> style.withColor(mode.getColor())),
-                mode.getDescription().copy().withStyle(ChatFormatting.GRAY)));
+                text.get("side_mode." + mode.getSerializedName() + ".desc").withStyle(ChatFormatting.GRAY)));
         ItemStack pull = replacingUpgrade(UpgradeSlotType.TRANSLOCATION_PULL);
         if (mode.canInput() && pull != null) {
             lines.add(Component.translatable("gui.better_auto_crafter.side_config.replaced.input", pull.getHoverName())
@@ -202,11 +203,11 @@ public class SideConfigTab extends SideTab {
         }
         int buttonId;
         if (Screen.hasShiftDown()) {
-            buttonId = BetterAutoCrafterMenu.resetModeButton(side);
+            buttonId = AutoMachineMenu.resetModeButton(side);
         } else if (button == 1) {
-            buttonId = BetterAutoCrafterMenu.previousModeButton(side);
+            buttonId = AutoMachineMenu.previousModeButton(side);
         } else {
-            buttonId = BetterAutoCrafterMenu.nextModeButton(side);
+            buttonId = AutoMachineMenu.nextModeButton(side);
         }
         sendMenuButton(menu, buttonId);
         return true;

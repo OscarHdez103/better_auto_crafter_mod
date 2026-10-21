@@ -21,10 +21,10 @@ import net.minecraft.world.level.Level;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * Upgrade that makes the crafter's input (PULL) or output (PUSH) faces work from a linked Translocator.
+ * Upgrade that makes a machine's input (PULL) or output (PUSH) faces work from a linked Translocator.
  * Use it on a Translocator to link the held stack; sneak-use it at nothing (or craft it alone) to clear the link.
- * Sneak-use it on a crafter to install it.
- * The basic version only works in the crafter's own dimension, the dimensional one anywhere.
+ * Sneak-use it on a machine to install it.
+ * The basic version only works in the machine's own dimension, the dimensional one anywhere.
  */
 public class TranslocationUpgradeItem extends LinkingUpgradeItem implements TranslocationUpgrade {
     private static final String LANG = "item.better_auto_crafter.translocation_upgrade.";

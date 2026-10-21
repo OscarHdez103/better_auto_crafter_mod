@@ -1,11 +1,11 @@
 {
   "parent": "minecraft:block/block",
   "textures": {
-    "particle": "better_auto_crafter:block/translocator_side",
-    "front": "better_auto_crafter:block/translocator_front",
-    "back": "better_auto_crafter:block/translocator_back",
-    "side": "better_auto_crafter:block/translocator_side",
-    "top": "better_auto_crafter:block/translocator_top"
+    "particle": "better_auto_crafter:block/translocator/translocator_side",
+    "front": "better_auto_crafter:block/translocator/translocator_front",
+    "back": "better_auto_crafter:block/translocator/translocator_back",
+    "side": "better_auto_crafter:block/translocator/translocator_side",
+    "top": "better_auto_crafter:block/translocator/translocator_top"
   },
   "elements": [
     {

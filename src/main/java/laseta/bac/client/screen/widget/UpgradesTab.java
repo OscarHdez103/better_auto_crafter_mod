@@ -2,7 +2,7 @@ package laseta.bac.client.screen.widget;
 
 import java.util.List;
 
-import laseta.bac.menu.BetterAutoCrafterMenu;
+import laseta.bac.machine.AutoMachineMenu;
 import laseta.bac.upgrade.UpgradeLayout;
 import laseta.bac.upgrade.UpgradeSlotType;
 import laseta.bac.upgrade.UpgradeStatus;
@@ -60,11 +60,11 @@ public class UpgradesTab extends SideTab {
         default -> 0;
     });
 
-    private final BetterAutoCrafterMenu menu;
+    private final AutoMachineMenu menu;
     private int guiLeft;
     private int guiTop;
 
-    public UpgradesTab(BetterAutoCrafterMenu menu, Font font) {
+    public UpgradesTab(AutoMachineMenu menu, Font font) {
         super(TITLE, DESCRIPTION, PALETTE, font, UpgradeLayout.GRID_WIDTH, UpgradeLayout.GRID_HEIGHT);
         this.menu = menu;
     }

@@ -1,6 +1,6 @@
 package laseta.bac.upgrade;
 
-import laseta.bac.block.entity.BetterAutoCrafterBlockEntity;
+import laseta.bac.machine.AutoMachineBlockEntity;
 import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
@@ -11,7 +11,7 @@ import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
 
 /**
- * Sneak + use with an upgrade on a Better Auto Crafter installs one upgrade without opening the GUI. If the slot
+ * Sneak + use with an upgrade on an auto machine installs one upgrade without opening the GUI. If the slot
  * holds a different upgrade (e.g. a basic pull upgrade when installing a dimensional one), that one is swapped out
  * and given back to the player.
  */
@@ -19,21 +19,21 @@ public final class UpgradeInstaller {
     private UpgradeInstaller() {
     }
 
-    /** @return PASS if this isn't a sneak-use of an upgrade on a crafter, so the item's normal use runs instead */
+    /** @return PASS if this isn't a sneak-use of an upgrade on a machine, so the item's normal use runs instead */
     public static InteractionResult tryInstall(UseOnContext context) {
         Player player = context.getPlayer();
         Level level = context.getLevel();
         ItemStack held = context.getItemInHand();
         UpgradeSlotType type = UpgradeSlotType.forStack(held);
         if (player == null || !player.isSecondaryUseActive() || type == null
-                || !(level.getBlockEntity(context.getClickedPos()) instanceof BetterAutoCrafterBlockEntity crafter)) {
+                || !(level.getBlockEntity(context.getClickedPos()) instanceof AutoMachineBlockEntity machine)) {
             return InteractionResult.PASS;
         }
         if (level.isClientSide) {
             return InteractionResult.SUCCESS;
         }
 
-        UpgradeInventory upgrades = crafter.getUpgrades();
+        UpgradeInventory upgrades = machine.getUpgrades();
         int slot = type.ordinal();
         ItemStack installed = upgrades.getStackInSlot(slot);
         ItemStack returned = ItemStack.EMPTY;

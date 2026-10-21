@@ -3,7 +3,7 @@ package laseta.bac.item;
 import java.util.ArrayList;
 import java.util.List;
 
-import laseta.bac.ServerConfig;
+import laseta.bac.CommonConfig;
 import laseta.bac.registry.ModDataComponents;
 import laseta.bac.upgrade.LinkedFace;
 import laseta.bac.upgrade.TranslocationMode;
@@ -28,14 +28,14 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * Upgrade that replaces the crafter's input (PULL) or output (PUSH) faces with blocks linked directly, up to
- * {@link #getMaxTargets()} of them (server config): the crafter pulls from / pushes into every one, which would otherwise take a
+ * Upgrade that replaces a machine's input (PULL) or output (PUSH) faces with blocks linked directly, up to
+ * {@link #getMaxTargets()} of them (server config): the machine pulls from / pushes into every one, which would otherwise take a
  * Translocator and an upgrade each. The side configuration's input (or output) faces are not used while it is installed.
  *
- * <p>Use it on a face of a block with an inventory to link that face (the crafter then sees the block from that side,
+ * <p>Use it on a face of a block with an inventory to link that face (the machine then sees the block from that side,
  * like a hopper there would); use it on a linked face again to unlink it. Sneak-use at nothing (or craft it alone)
- * clears every link; sneak-use it on a crafter to install it. The basic version links blocks of one dimension and
- * works in the crafter's own dimension, the dimensional one anywhere.</p>
+ * clears every link; sneak-use it on a machine to install it. The basic version links blocks of one dimension and
+ * works in the machine's own dimension, the dimensional one anywhere.</p>
  */
 public class MultiTranslocationUpgradeItem extends LinkingUpgradeItem implements TranslocationUpgrade {
     private static final String LANG = "item.better_auto_crafter.multi_translocation_upgrade.";
@@ -66,12 +66,12 @@ public class MultiTranslocationUpgradeItem extends LinkingUpgradeItem implements
         return mode.getColor();
     }
 
-    /** How many faces one upgrade can link, from the server config. Crafters only use the first ones up to this many. */
+    /** How many faces one upgrade can link, from the server config. Machines only use the first ones up to this many. */
     public static int getMaxTargets() {
-        return ServerConfig.multiTranslocationMaxLinks();
+        return CommonConfig.multiTranslocationMaxLinks();
     }
 
-    /** The linked blocks and faces, in link order (the order the crafter uses them in). */
+    /** The linked blocks and faces, in link order (the order the machine uses them in). */
     public static List<LinkedFace> getTargets(ItemStack stack) {
         return stack.getOrDefault(ModDataComponents.TRANSLOCATION_TARGETS.get(), List.of());
     }

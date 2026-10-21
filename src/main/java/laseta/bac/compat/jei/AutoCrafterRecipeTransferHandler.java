@@ -11,7 +11,6 @@ import laseta.bac.compat.RecipeFillHelper;
 import laseta.bac.menu.BetterAutoCrafterMenu;
 import laseta.bac.menu.transfer.GridFillPlanner;
 import laseta.bac.registry.ModMenuTypes;
-import mezz.jei.api.constants.RecipeTypes;
 import mezz.jei.api.gui.builder.ITooltipBuilder;
 import mezz.jei.api.gui.ingredient.IRecipeSlotView;
 import mezz.jei.api.gui.ingredient.IRecipeSlotsView;
@@ -26,24 +25,28 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.crafting.CraftingRecipe;
+import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * JEI "+" button for crafting recipes. Places whatever ingredients the player has; slots it can't fill are
- * highlighted in red but the button still works. It is only disabled when nothing at all can be placed.
+ * JEI "+" button for crafting and auto crafting recipes. Places whatever ingredients the player has (one of each: the
+ * grid is only the recipe's layout); slots it can't fill are highlighted in red but the button still works. It is only
+ * disabled when nothing at all can be placed.
  */
-public class AutoCrafterRecipeTransferHandler
-        implements IRecipeTransferHandler<BetterAutoCrafterMenu, RecipeHolder<CraftingRecipe>> {
+public class AutoCrafterRecipeTransferHandler<R extends Recipe<?>>
+        implements IRecipeTransferHandler<BetterAutoCrafterMenu, RecipeHolder<R>> {
     private static final int MISSING_SLOT_COLOR = 0x66FF0000;
     private static final int PARTIAL_BUTTON_COLOR = 0x80FFA500;
 
     private final IRecipeTransferHandlerHelper helper;
+    private final RecipeType<RecipeHolder<R>> recipeType;
 
-    public AutoCrafterRecipeTransferHandler(IRecipeTransferHandlerHelper helper) {
+    /** @param recipeType a category that always lays its inputs out as the 3x3 grid, in order */
+    public AutoCrafterRecipeTransferHandler(IRecipeTransferHandlerHelper helper, RecipeType<RecipeHolder<R>> recipeType) {
         this.helper = helper;
+        this.recipeType = recipeType;
     }
 
     @Override
@@ -57,17 +60,17 @@ public class AutoCrafterRecipeTransferHandler
     }
 
     @Override
-    public @NotNull RecipeType<RecipeHolder<CraftingRecipe>> getRecipeType() {
-        return RecipeTypes.CRAFTING;
+    public @NotNull RecipeType<RecipeHolder<R>> getRecipeType() {
+        return recipeType;
     }
 
     // Still the abstract method in JEI 19 (the newer context-based overload just forwards here), so it must be implemented.
     @SuppressWarnings("removal")
     @Override
-    public @Nullable IRecipeTransferError transferRecipe(@NotNull BetterAutoCrafterMenu menu, @NotNull RecipeHolder<CraftingRecipe> recipe,
+    public @Nullable IRecipeTransferError transferRecipe(@NotNull BetterAutoCrafterMenu menu, @NotNull RecipeHolder<R> recipe,
                                                          IRecipeSlotsView recipeSlots, @NotNull Player player,
                                                          boolean maxTransfer, boolean doTransfer) {
-        // JEI's crafting category always lays its inputs out as the 3x3 grid, in order.
+        // JEI's crafting category (and the auto crafting one) always lays its inputs out as the 3x3 grid, in order.
         List<IRecipeSlotView> inputs = recipeSlots.getSlotViews(RecipeIngredientRole.INPUT);
         if (inputs.size() > BetterAutoCrafterBlockEntity.GRID_SIZE) {
             return helper.createUserErrorWithTooltip(Component.translatable("gui.better_auto_crafter.transfer.too_large"));

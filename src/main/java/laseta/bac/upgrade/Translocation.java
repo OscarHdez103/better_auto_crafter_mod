@@ -1,7 +1,7 @@
 package laseta.bac.upgrade;
 
 import laseta.bac.block.TranslocatorBlock;
-import laseta.bac.crafting.CraftingAnchor;
+import laseta.bac.machine.MachineAnchor;
 import laseta.bac.item.TranslocationUpgradeItem;
 import laseta.bac.registry.ModBlocks;
 import laseta.bac.registry.ModDataComponents;
@@ -11,10 +11,10 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.Nullable;
 
-/** Resolves an installed translocation upgrade to the place the crafter should work from. Server only. */
+/** Resolves an installed translocation upgrade to the place the machine should work from. Server only. */
 public final class Translocation {
     /** @param anchor the Translocator to work from; only set when {@code status} is ACTIVE */
-    public record Result(UpgradeStatus status, @Nullable CraftingAnchor anchor) {
+    public record Result(UpgradeStatus status, @Nullable MachineAnchor anchor) {
         private static Result of(UpgradeStatus status) {
             return new Result(status, null);
         }
@@ -27,7 +27,7 @@ public final class Translocation {
      * Never loads chunks: an unloaded Translocator (or one in an unloaded dimension) makes the upgrade inactive until
      * it is loaded again, the same way hoppers and pipes don't reach into unloaded chunks.
      */
-    public static Result resolve(ItemStack upgrade, ServerLevel crafterLevel) {
+    public static Result resolve(ItemStack upgrade, ServerLevel machineLevel) {
         if (upgrade.isEmpty() || !(upgrade.getItem() instanceof TranslocationUpgradeItem item)) {
             return Result.of(UpgradeStatus.EMPTY);
         }
@@ -35,10 +35,10 @@ public final class Translocation {
         if (link == null) {
             return Result.of(UpgradeStatus.NOT_LINKED);
         }
-        if (!item.isDimensional() && !link.dimension().equals(crafterLevel.dimension())) {
+        if (!item.isDimensional() && !link.dimension().equals(machineLevel.dimension())) {
             return Result.of(UpgradeStatus.WRONG_DIMENSION);
         }
-        ServerLevel targetLevel = crafterLevel.getServer().getLevel(link.dimension());
+        ServerLevel targetLevel = machineLevel.getServer().getLevel(link.dimension());
         if (targetLevel == null) {
             return Result.of(UpgradeStatus.DIMENSION_UNAVAILABLE);
         }
@@ -50,6 +50,6 @@ public final class Translocation {
             return Result.of(UpgradeStatus.TRANSLOCATOR_MISSING);
         }
         return new Result(UpgradeStatus.ACTIVE,
-                new CraftingAnchor(targetLevel, link.pos(), state.getValue(TranslocatorBlock.FACING)));
+                new MachineAnchor(targetLevel, link.pos(), state.getValue(TranslocatorBlock.FACING)));
     }
 }

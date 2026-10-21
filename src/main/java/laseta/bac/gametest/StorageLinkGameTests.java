@@ -4,10 +4,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 import laseta.bac.BetterAutoCrafter;
-import laseta.bac.block.BetterAutoCrafterBlock;
 import laseta.bac.block.entity.BetterAutoCrafterBlockEntity;
 import laseta.bac.compat.StorageLinkIntegrations;
-import laseta.bac.crafting.RedstoneMode;
+import laseta.bac.machine.AutoMachineBlock;
+import laseta.bac.machine.RedstoneMode;
 import laseta.bac.item.LinkingUpgradeItem;
 import laseta.bac.registry.ModBlocks;
 import laseta.bac.registry.ModCreativeTabs;
@@ -88,7 +88,7 @@ public final class StorageLinkGameTests {
         helper.runAfterDelay(SETTLE, () -> {
             assertCount(helper, input, Items.OAK_PLANKS, 10, "nothing pulled");
             assertCount(helper, output, Items.STICK, 0, "nothing crafted");
-            helper.assertBlockProperty(CRAFTER, BetterAutoCrafterBlock.FAILED, true);
+            helper.assertBlockProperty(CRAFTER, AutoMachineBlock.FAILED, true);
             helper.assertTrue(crafter.getUpgradeStatus(UpgradeSlotType.STORAGE_LINK) == UpgradeStatus.ACTIVE, "link works");
             helper.succeed();
         });
@@ -332,12 +332,12 @@ public final class StorageLinkGameTests {
 
     private static BetterAutoCrafterBlockEntity placeStickCrafter(GameTestHelper helper) {
         helper.setBlock(CRAFTER, ModBlocks.BETTER_AUTO_CRAFTER.get().defaultBlockState()
-                .setValue(BetterAutoCrafterBlock.FACING, Direction.NORTH));
+                .setValue(AutoMachineBlock.FACING, Direction.NORTH));
         BetterAutoCrafterBlockEntity crafter = helper.getBlockEntity(CRAFTER);
-        crafter.getCraftingSettings().setRedstoneMode(RedstoneMode.ON_POWERED);
+        crafter.getSettings().setRedstoneMode(RedstoneMode.ON_POWERED);
         ItemStack plank = new ItemStack(Items.OAK_PLANKS);
-        crafter.getInventory().setStackInSlot(1, plank.copy());
-        crafter.getInventory().setStackInSlot(4, plank.copy());
+        crafter.getTemplate().setStackInSlot(1, plank.copy());
+        crafter.getTemplate().setStackInSlot(4, plank.copy());
         crafter.getSideConfig().setMode(RelativeSide.TOP, SideMode.INPUT);
         crafter.getSideConfig().setMode(RelativeSide.BOTTOM, SideMode.OUTPUT);
         return crafter;
