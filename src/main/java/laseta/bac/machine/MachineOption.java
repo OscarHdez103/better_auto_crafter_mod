@@ -10,7 +10,7 @@ import net.minecraft.util.StringRepresentable;
  * one row per option. Compare {@link MachineSettings}, which every machine has.
  *
  * <p>The values' serialized names are saved, so values can be reordered or added later; an unknown name loads as the
- * default. GUI texts use the option's name, see the client's {@code MachineOptionsTab}.</p>
+ * default. GUI texts use the option's name, see the client's {@code MachineTab}.</p>
  */
 public final class MachineOption<T extends Enum<T> & StringRepresentable> {
     private final String name;

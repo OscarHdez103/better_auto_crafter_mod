@@ -2,7 +2,9 @@ package laseta.bac.registry;
 
 import laseta.bac.BetterAutoCrafter;
 import laseta.bac.block.BetterAutoCrafterBlock;
+import laseta.bac.block.BetterAutoBrewerBlock;
 import laseta.bac.block.BetterAutoMoverBlock;
+import laseta.bac.block.BetterAutoSmelterBlock;
 import laseta.bac.block.TranslocatorBlock;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
@@ -32,6 +34,24 @@ public final class ModBlocks {
                     .instrument(NoteBlockInstrument.BASS)
                     .strength(2.5F)
                     .sound(SoundType.WOOD));
+
+    public static final DeferredBlock<BetterAutoSmelterBlock> BETTER_AUTO_SMELTER = BLOCKS.registerBlock(
+            "better_auto_smelter",
+            BetterAutoSmelterBlock::new,
+            BlockBehaviour.Properties.of()
+                    .mapColor(MapColor.STONE)
+                    .instrument(NoteBlockInstrument.BASEDRUM)
+                    .strength(3.5F)
+                    .sound(SoundType.STONE));
+
+    public static final DeferredBlock<BetterAutoBrewerBlock> BETTER_AUTO_BREWER = BLOCKS.registerBlock(
+            "better_auto_brewer",
+            BetterAutoBrewerBlock::new,
+            BlockBehaviour.Properties.of()
+                    .mapColor(MapColor.STONE)
+                    .instrument(NoteBlockInstrument.BASEDRUM)
+                    .strength(3.5F)
+                    .sound(SoundType.STONE));
 
     public static final DeferredBlock<TranslocatorBlock> TRANSLOCATOR = BLOCKS.registerBlock(
             "translocator",

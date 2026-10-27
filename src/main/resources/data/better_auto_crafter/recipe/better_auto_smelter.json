@@ -1,0 +1,33 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "pattern": [
+    "BFB",
+    "XDS",
+    "BCB"
+  ],
+  "key": {
+    "B": {
+      "item": "better_auto_crafter:better_material"
+    },
+    "D": {
+      "item": "minecraft:dropper"
+    },
+    "S": {
+      "item": "minecraft:smoker"
+    },
+    "X": {
+      "item": "minecraft:blast_furnace"
+    },
+    "C": {
+      "tag": "better_auto_crafter:campfires"
+    },
+    "F": {
+      "item": "minecraft:furnace"
+    }
+  },
+  "result": {
+    "id": "better_auto_crafter:better_auto_smelter",
+    "count": 1
+  }
+}

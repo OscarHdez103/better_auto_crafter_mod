@@ -37,6 +37,13 @@ public class EmiCompat implements EmiPlugin {
         });
 
         registry.addWorkstation(VanillaEmiRecipeCategories.CRAFTING, EmiStack.of(ModItems.BETTER_AUTO_CRAFTER.get()));
+        EmiStack smelter = EmiStack.of(ModItems.BETTER_AUTO_SMELTER.get());
+        registry.addWorkstation(VanillaEmiRecipeCategories.CAMPFIRE_COOKING, smelter);
+        registry.addWorkstation(VanillaEmiRecipeCategories.BLASTING, smelter);
+        registry.addWorkstation(VanillaEmiRecipeCategories.SMOKING, smelter);
+        registry.addWorkstation(VanillaEmiRecipeCategories.SMELTING, smelter);
+        registry.addWorkstation(VanillaEmiRecipeCategories.FUEL, smelter);
+        registry.addWorkstation(VanillaEmiRecipeCategories.BREWING, EmiStack.of(ModItems.BETTER_AUTO_BREWER.get()));
         registry.addCategory(AUTO_CRAFTING);
         registry.addWorkstation(AUTO_CRAFTING, EmiStack.of(ModItems.BETTER_AUTO_CRAFTER.get()));
         for (RecipeHolder<AutoCraftingRecipe> holder : registry.getRecipeManager().getAllRecipesFor(ModRecipeTypes.AUTO_CRAFTING.get())) {

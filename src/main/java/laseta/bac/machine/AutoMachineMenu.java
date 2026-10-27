@@ -3,6 +3,8 @@ package laseta.bac.machine;
 import java.util.List;
 import java.util.Objects;
 
+import laseta.bac.item.ItemSettingUpgradeItem;
+import laseta.bac.menu.slot.MachineUpgradeSlot;
 import laseta.bac.menu.slot.ResultPreviewSlot;
 import laseta.bac.menu.slot.UpgradeSlot;
 import laseta.bac.sideconfig.RelativeSide;
@@ -32,8 +34,9 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * Menu of an auto machine: the template grid, the player inventory and the upgrade slots, plus the side configuration,
- * settings, machine options and upgrade statuses as data slots, changed with menu buttons.
+ * Menu of an auto machine: the template grid, the player inventory and the upgrade slots (every machine's, then the
+ * machine's own), plus the side configuration, settings, machine options, channel faces, upgrade statuses and machine
+ * status as data slots, changed with menu buttons.
  *
  * <p>Subclasses add the slots in their constructor, in this order so slot indices never change: the template grid
  * ({@link #addTemplateSlots}), their own slots if any, the player inventory ({@link #addPlayerInventory}), then the
@@ -42,7 +45,9 @@ import org.jetbrains.annotations.Nullable;
 public abstract class AutoMachineMenu extends AbstractContainerMenu {
     // Menu button ids (sent with vanilla's ServerboundContainerButtonClickPacket):
     // [0, 6) next mode, [6, 12) previous mode, [12, 18) reset to NONE. Offset by RelativeSide ordinal.
-    // Then one id per setting action, then MachineOptions.MAX_VALUES ids per machine option (select that value).
+    // Then one id per setting action, then MachineOptions.MAX_VALUES ids per machine option (select that value), then
+    // RelativeSide.COUNT ids per face channel (toggle that face), then one id per machine upgrade slot (set its upgrade's
+    // item setting to the carried item).
     private static final int BUTTON_NEXT = 0;
     private static final int BUTTON_PREVIOUS = RelativeSide.COUNT;
     private static final int BUTTON_RESET = RelativeSide.COUNT * 2;
@@ -61,15 +66,17 @@ public abstract class AutoMachineMenu extends AbstractContainerMenu {
      * syncing keeps up to date.
      */
     protected record Source(IItemHandler template, int gridWidth, int gridHeight, IItemHandler upgrades,
-                            ContainerData sideModes, ContainerData settings, List<MachineOption<?>> optionTypes,
-                            ContainerData options, ContainerData upgradeStatus, BlockPos pos, ContainerLevelAccess access,
+                            IItemHandler machineUpgrades, ContainerData sideModes, ContainerData settings,
+                            MachineFeatures features, ContainerData options, ContainerData channelFaces,
+                            ContainerData upgradeStatus, ContainerData status, BlockPos pos, ContainerLevelAccess access,
                             @Nullable AutoMachineBlockEntity blockEntity) {
         /** Server side, backed by the block entity. */
         public static Source of(AutoMachineBlockEntity blockEntity) {
             return new Source(blockEntity.getTemplate(), blockEntity.getGridWidth(), blockEntity.getGridHeight(),
-                    blockEntity.getUpgrades(), blockEntity.getSideConfig().asContainerData(),
-                    blockEntity.getSettings().asContainerData(), blockEntity.getOptions().definitions(),
-                    blockEntity.getOptions().asContainerData(), blockEntity.getUpgradeStatusData(), blockEntity.getBlockPos(),
+                    blockEntity.getUpgrades(), blockEntity.getMachineUpgrades(), blockEntity.getSideConfig().asContainerData(),
+                    blockEntity.getSettings().asContainerData(), blockEntity.getFeatures(),
+                    blockEntity.getOptions().asContainerData(), blockEntity.getChannelFaces().asContainerData(),
+                    blockEntity.getUpgradeStatusData(), blockEntity.getStatusData(), blockEntity.getBlockPos(),
                     ContainerLevelAccess.create(Objects.requireNonNull(blockEntity.getLevel()), blockEntity.getBlockPos()),
                     blockEntity);
         }
@@ -80,13 +87,28 @@ public abstract class AutoMachineMenu extends AbstractContainerMenu {
          * @param optionTypes the machine's options, the same list its block entity uses
          */
         public static Source client(RegistryFriendlyByteBuf extraData, List<MachineOption<?>> optionTypes) {
+            return client(extraData, MachineFeatures.ofOptions(optionTypes));
+        }
+
+        /**
+         * Client side, with the data written by {@link AutoMachineBlockEntity#writeMenuData}.
+         *
+         * @param features the machine's own features, the same its block entity uses
+         */
+        public static Source client(RegistryFriendlyByteBuf extraData, MachineFeatures features) {
             BlockPos pos = extraData.readBlockPos();
             int gridWidth = extraData.readVarInt();
             int gridHeight = extraData.readVarInt();
+            int[] upgradeLimits = new int[UpgradeSlotType.COUNT];
+            for (int i = 0; i < upgradeLimits.length; i++) {
+                upgradeLimits[i] = extraData.readVarInt();
+            }
             return new Source(new ItemStackHandler(gridWidth * gridHeight), gridWidth, gridHeight, new UpgradeInventory(() -> {
-            }), new SimpleContainerData(RelativeSide.COUNT), new SimpleContainerData(MachineSettings.DATA_COUNT),
-                    optionTypes, new SimpleContainerData(optionTypes.size()), new SimpleContainerData(UpgradeSlotType.COUNT),
-                    pos, ContainerLevelAccess.NULL, null);
+            }, type -> upgradeLimits[type.ordinal()]), new MachineUpgradeInventory(features.upgradeSlots(), () -> {
+            }), new SimpleContainerData(RelativeSide.COUNT), new SimpleContainerData(MachineSettings.DATA_COUNT), features,
+                    new SimpleContainerData(features.options().size()), new SimpleContainerData(features.channels().size()),
+                    new SimpleContainerData(UpgradeSlotType.COUNT), new SimpleContainerData(MachineStatus.DATA_COUNT), pos,
+                    ContainerLevelAccess.NULL, null);
         }
     }
 
@@ -100,13 +122,21 @@ public abstract class AutoMachineMenu extends AbstractContainerMenu {
     private final ContainerData sideModes;
     /** MachineSettings values (see MachineSettings.DATA_*). */
     private final ContainerData settings;
+    private final MachineFeatures features;
+    private final MachineTabLayout machineTabLayout;
     private final List<MachineOption<?>> optionTypes;
     /** The ordinal of each machine option's value, in {@link #optionTypes} order. */
     private final ContainerData options;
+    /** The faces that are on for each face channel, a bit per RelativeSide. */
+    private final ContainerData channelFaces;
     /** UpgradeStatus per upgrade slot, computed by the block entity on the server. */
     private final ContainerData upgradeStatus;
+    /** Cooldown, problem and redstone signal for the status icon (see MachineStatus.DATA_*). */
+    private final ContainerData status;
     /** Client only: set by the screen while the upgrades tab is open, which shows the upgrade slots. */
     private boolean upgradeSlotsVisible;
+    /** Client only: set by the screen while the machine's own tab is open, which shows its upgrade slots. */
+    private boolean machineUpgradeSlotsVisible;
 
     // Slot index ranges, end exclusive; set while the subclass adds the slots.
     private int templateStart;
@@ -115,6 +145,8 @@ public abstract class AutoMachineMenu extends AbstractContainerMenu {
     private int playerInventoryEnd;
     private int upgradesStart;
     private int upgradesEnd;
+    private int machineUpgradesStart;
+    private int machineUpgradesEnd;
 
     /** @param block the machine's block: the menu closes when it is gone */
     protected AutoMachineMenu(MenuType<?> type, int containerId, Block block, MachineLayout layout, Source source) {
@@ -122,7 +154,9 @@ public abstract class AutoMachineMenu extends AbstractContainerMenu {
         checkContainerDataCount(source.sideModes(), RelativeSide.COUNT);
         checkContainerDataCount(source.settings(), MachineSettings.DATA_COUNT);
         checkContainerDataCount(source.upgradeStatus(), UpgradeSlotType.COUNT);
-        checkContainerDataCount(source.options(), source.optionTypes().size());
+        checkContainerDataCount(source.options(), source.features().options().size());
+        checkContainerDataCount(source.channelFaces(), source.features().channels().size());
+        checkContainerDataCount(source.status(), MachineStatus.DATA_COUNT);
         if (layout.gridSize() != source.template().getSlots()) {
             throw new IllegalArgumentException("The layout's grid has " + layout.gridSize() + " slots, the machine's "
                     + source.template().getSlots());
@@ -134,15 +168,22 @@ public abstract class AutoMachineMenu extends AbstractContainerMenu {
         this.access = source.access();
         this.sideModes = source.sideModes();
         this.settings = source.settings();
-        this.optionTypes = source.optionTypes();
+        this.features = source.features();
+        this.machineTabLayout = new MachineTabLayout(features);
+        this.optionTypes = features.options();
         this.options = source.options();
+        this.channelFaces = source.channelFaces();
         this.upgradeStatus = source.upgradeStatus();
+        this.status = source.status();
         // The server has no screen: there the slots are always "visible" (it doesn't use positions anyway).
         this.upgradeSlotsVisible = blockEntity != null;
+        this.machineUpgradeSlotsVisible = blockEntity != null;
         addDataSlots(sideModes);
         addDataSlots(settings);
         addDataSlots(options);
+        addDataSlots(channelFaces);
         addDataSlots(upgradeStatus);
+        addDataSlots(status);
     }
 
     // ---------------------------------------------------------------------------------------------------------------
@@ -171,14 +212,21 @@ public abstract class AutoMachineMenu extends AbstractContainerMenu {
         playerInventoryEnd = slots.size();
     }
 
-    /** Upgrade slots, in the upgrades tab on the left of the GUI. */
+    /** Upgrade slots, in the upgrades tab on the left of the GUI, then the machine's own ones, in its tab. */
     protected void addUpgradeSlots(Source source) {
         upgradesStart = slots.size();
         for (UpgradeSlotType type : UpgradeSlotType.values()) {
-            addSlot(new UpgradeSlot(source.upgrades(), type, UpgradeLayout.slotX(type.ordinal()), UpgradeLayout.slotY(type.ordinal()),
+            addSlot(new UpgradeSlot(source.upgrades(), type, UpgradeLayout.slotX(type), UpgradeLayout.slotY(type),
                     () -> upgradeSlotsVisible));
         }
         upgradesEnd = slots.size();
+        machineUpgradesStart = slots.size();
+        for (int i = 0; i < features.upgradeSlots().size(); i++) {
+            MachineTabLayout.Box frame = machineTabLayout.upgradeSlot(i);
+            addSlot(new MachineUpgradeSlot(source.machineUpgrades(), i, features.upgradeSlots().get(i), frame.x() + 1,
+                    frame.y() + 1, () -> machineUpgradeSlotsVisible));
+        }
+        machineUpgradesEnd = slots.size();
     }
 
     protected int templateStart() {
@@ -209,6 +257,27 @@ public abstract class AutoMachineMenu extends AbstractContainerMenu {
 
     public void setUpgradeSlotsVisible(boolean visible) {
         this.upgradeSlotsVisible = visible;
+    }
+
+    public void setMachineUpgradeSlotsVisible(boolean visible) {
+        this.machineUpgradeSlotsVisible = visible;
+    }
+
+    public MachineFeatures getFeatures() {
+        return features;
+    }
+
+    /** Where everything in the machine's own tab is. */
+    public MachineTabLayout getMachineTabLayout() {
+        return machineTabLayout;
+    }
+
+    public Slot getMachineUpgradeSlot(int index) {
+        return slots.get(machineUpgradesStart + index);
+    }
+
+    public boolean isChannelFaceOn(int channelIndex, RelativeSide side) {
+        return ChannelFaces.isOn(channelFaces.get(channelIndex), side);
     }
 
     public UpgradeStatus getUpgradeStatus(UpgradeSlotType type) {
@@ -243,6 +312,31 @@ public abstract class AutoMachineMenu extends AbstractContainerMenu {
         return RedstoneMode.byId(settings.get(MachineSettings.DATA_REDSTONE_MODE));
     }
 
+    /** Ticks until the machine may run again; 0 when it isn't cooling down. */
+    public int getCooldownLeft() {
+        return status.get(MachineStatus.DATA_COOLDOWN_LEFT);
+    }
+
+    /** Length of the current cooldown. */
+    public int getCooldownTotal() {
+        return status.get(MachineStatus.DATA_COOLDOWN_TOTAL);
+    }
+
+    /** What stops the machine right now, or else what stopped its last attempt; null if nothing. */
+    @Nullable
+    public MachineProblem getProblem() {
+        return MachineProblem.byId(status.get(MachineStatus.DATA_PROBLEM));
+    }
+
+    /** Whether the block receives a redstone signal. */
+    public boolean hasSignal() {
+        return status.get(MachineStatus.DATA_SIGNAL) != 0;
+    }
+
+    public MachineState getState() {
+        return MachineState.of(getRedstoneMode(), hasSignal(), getCooldownLeft() > 0, getProblem());
+    }
+
     /** The machine's own options, in the order its tab shows them; empty for machines without any. */
     public List<MachineOption<?>> getOptionTypes() {
         return optionTypes;
@@ -273,6 +367,24 @@ public abstract class AutoMachineMenu extends AbstractContainerMenu {
         return BUTTON_OPTIONS_START + optionIndex * MachineOptions.MAX_VALUES + value.ordinal();
     }
 
+    private int channelButtonsStart() {
+        return BUTTON_OPTIONS_START + optionTypes.size() * MachineOptions.MAX_VALUES;
+    }
+
+    private int settingButtonsStart() {
+        return channelButtonsStart() + features.channels().size() * RelativeSide.COUNT;
+    }
+
+    /** Turns a face on or off for one of the machine's face channels. */
+    public int toggleChannelFaceButton(int channelIndex, RelativeSide side) {
+        return channelButtonsStart() + channelIndex * RelativeSide.COUNT + side.ordinal();
+    }
+
+    /** Sets the item setting of the upgrade in one of the machine's upgrade slots to the carried item (EMPTY clears it). */
+    public int setUpgradeSettingButton(int slotIndex) {
+        return settingButtonsStart() + slotIndex;
+    }
+
     /**
      * Called on the server when the client sends a button click, and on the client for an instant (predicted) update.
      * On the server, writing to {@link #sideModes} / {@link #settings} / {@link #options} writes straight into the
@@ -280,8 +392,17 @@ public abstract class AutoMachineMenu extends AbstractContainerMenu {
      */
     @Override
     public boolean clickMenuButton(@NotNull Player player, int id) {
-        if (id < 0 || id >= BUTTON_OPTIONS_START + optionTypes.size() * MachineOptions.MAX_VALUES) {
+        if (id < 0 || id >= settingButtonsStart() + features.upgradeSlots().size()) {
             return false;
+        }
+        if (id >= settingButtonsStart()) {
+            return setUpgradeSetting(id - settingButtonsStart());
+        }
+        if (id >= channelButtonsStart()) {
+            int channelIndex = (id - channelButtonsStart()) / RelativeSide.COUNT;
+            int side = (id - channelButtonsStart()) % RelativeSide.COUNT;
+            channelFaces.set(channelIndex, channelFaces.get(channelIndex) ^ 1 << side);
+            return true;
         }
         if (id >= BUTTON_OPTIONS_START) {
             int optionIndex = (id - BUTTON_OPTIONS_START) / MachineOptions.MAX_VALUES;
@@ -324,6 +445,23 @@ public abstract class AutoMachineMenu extends AbstractContainerMenu {
         return true;
     }
 
+    /**
+     * Sets the installed upgrade's item setting to a copy of the carried item, or clears it with an empty hand. The
+     * carried item is never used up. Works the same on both sides (the carried item is synced).
+     */
+    private boolean setUpgradeSetting(int slotIndex) {
+        Slot slot = getMachineUpgradeSlot(slotIndex);
+        ItemStack upgrade = slot.getItem();
+        ItemStack carried = getCarried();
+        if (!(upgrade.getItem() instanceof ItemSettingUpgradeItem item) || (!carried.isEmpty() && !item.canBeSetTo(carried))) {
+            return false;
+        }
+        ItemStack updated = upgrade.copy();
+        ItemSettingUpgradeItem.setSetting(updated, carried);
+        slot.set(updated);
+        return true;
+    }
+
     // ---------------------------------------------------------------------------------------------------------------
     // Clicks
     // ---------------------------------------------------------------------------------------------------------------
@@ -363,14 +501,20 @@ public abstract class AutoMachineMenu extends AbstractContainerMenu {
                 return ItemStack.EMPTY;
             }
         } else {
-            // Player inventory -> one item into its upgrade slot if it's an upgrade and there is room, otherwise -> template
-            if (moveOneToUpgrades(stack)) {
-                if (stack.isEmpty()) {
-                    slot.setByPlayer(ItemStack.EMPTY);
-                } else {
-                    slot.setChanged();
+            // Player inventory -> as many as fit into its upgrade slot if it's an upgrade (never the template, even
+            // when that slot is full), otherwise -> template
+            boolean upgrade = UpgradeSlotType.forStack(stack) != null;
+            boolean machineUpgrade = !upgrade && features.upgradeSlots().stream().anyMatch(type -> type.canHold(stack));
+            if (upgrade || machineUpgrade) {
+                if (upgrade ? moveItemStackTo(stack, upgradesStart, upgradesEnd, false)
+                        : moveItemStackTo(stack, machineUpgradesStart, machineUpgradesEnd, false)) {
+                    if (stack.isEmpty()) {
+                        slot.setByPlayer(ItemStack.EMPTY);
+                    } else {
+                        slot.setChanged();
+                    }
                 }
-                // EMPTY stops vanilla's quick-move loop, so each shift-click installs exactly one upgrade.
+                // EMPTY stops vanilla's quick-move loop: the slot took all it could.
                 return ItemStack.EMPTY;
             }
             if (!moveItemStackTo(stack, templateStart, templateEnd, false)) {
@@ -389,19 +533,6 @@ public abstract class AutoMachineMenu extends AbstractContainerMenu {
         }
         slot.onTake(player, stack);
         return original;
-    }
-
-    /** Moves a single item of {@code stack} into the upgrade slot that accepts it, if there is room. */
-    private boolean moveOneToUpgrades(ItemStack stack) {
-        if (UpgradeSlotType.forStack(stack) == null) {
-            return false;
-        }
-        ItemStack one = stack.copyWithCount(1);
-        if (!moveItemStackTo(one, upgradesStart, upgradesEnd, false)) {
-            return false;
-        }
-        stack.shrink(1);
-        return true;
     }
 
     @Override

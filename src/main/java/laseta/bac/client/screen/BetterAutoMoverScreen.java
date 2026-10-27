@@ -2,15 +2,15 @@ package laseta.bac.client.screen;
 
 import java.util.List;
 
+import laseta.bac.BetterAutoCrafter;
 import laseta.bac.block.entity.BetterAutoMoverBlockEntity;
-import laseta.bac.client.screen.widget.PixelIcon;
 import laseta.bac.machine.MachineOption;
 import laseta.bac.machine.MachineLayout;
 import laseta.bac.menu.BetterAutoMoverMenu;
-import laseta.bac.sideconfig.SideMode;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
 import org.jetbrains.annotations.NotNull;
 
@@ -20,107 +20,32 @@ import org.jetbrains.annotations.NotNull;
  */
 public class BetterAutoMoverScreen extends AutoMachineScreen<BetterAutoMoverMenu> {
     private static final int ARROW_SIZE = 16;
-    private static final PixelIcon INPUT_ARROW = arrow(SideMode.INPUT.getColor());
-    private static final PixelIcon OUTPUT_ARROW = arrow(SideMode.OUTPUT.getColor());
+    private static final int ICON_SIZE = 16;
+    /** Right-pointing arrows in the side configuration's input and output colours, lighter on their upper half. */
+    private static final ResourceLocation INPUT_ARROW = sprite("input_arrow");
+    private static final ResourceLocation OUTPUT_ARROW = sprite("output_arrow");
     private static final Component INPUT_TOOLTIP = Component.translatable("gui.better_auto_crafter.better_auto_mover.input_arrow");
     private static final Component OUTPUT_TOOLTIP = Component.translatable("gui.better_auto_crafter.better_auto_mover.output_arrow");
 
     /** All together: the grid's cells joined into one block, which moves as a whole. */
-    private static final PixelIcon ALL_TOGETHER_ICON = new PixelIcon(new String[]{
-            "################",
-            "#oooo=oooo=oooo#",
-            "#oooo=oooo=oooo#",
-            "#oooo=oooo=oooo#",
-            "#oooo=oooo=oooo#",
-            "#==============#",
-            "#oooo=oooo=oooo#",
-            "#oooo=oooo=oooo#",
-            "#oooo=oooo=oooo#",
-            "#oooo=oooo=oooo#",
-            "#==============#",
-            "#oooo=oooo=oooo#",
-            "#oooo=oooo=oooo#",
-            "#oooo=oooo=oooo#",
-            "#oooo=oooo=oooo#",
-            "################",
-    }, BetterAutoMoverScreen::gridIconColor);
-
+    private static final ResourceLocation ALL_TOGETHER_ICON = sprite("all_together");
     /** Each slot: separate cells, some full and some empty, each moving on its own. */
-    private static final PixelIcon EACH_SLOT_ICON = new PixelIcon(new String[]{
-            "####..####..####",
-            "#oo#..#xx#..#oo#",
-            "#oo#..#xx#..#oo#",
-            "####..####..####",
-            "................",
-            "................",
-            "####..####..####",
-            "#xx#..#oo#..#oo#",
-            "#xx#..#oo#..#oo#",
-            "####..####..####",
-            "................",
-            "................",
-            "####..####..####",
-            "#oo#..#oo#..#xx#",
-            "#oo#..#oo#..#xx#",
-            "####..####..####",
-    }, BetterAutoMoverScreen::gridIconColor);
+    private static final ResourceLocation EACH_SLOT_ICON = sprite("each_slot");
 
     public BetterAutoMoverScreen(BetterAutoMoverMenu menu, Inventory playerInventory, Component title) {
         super(menu, playerInventory, title);
     }
 
-    /** Right-pointing arrow: '#' dark outline, 'o' the colour, lighter on its upper half. */
-    private static PixelIcon arrow(int rgb) {
-        int light = 0xFF000000 | blend(rgb, 0xFFFFFF, 0.35F);
-        int base = 0xFF000000 | rgb;
-        int outline = 0xFF000000 | blend(rgb, 0x000000, 0.65F);
-        return new PixelIcon(new String[]{
-                "................",
-                "........#.......",
-                "........##......",
-                "........#o#.....",
-                "........#oo#....",
-                "#########ooo#...",
-                "#oooooooooooo#..",
-                "#ooooooooooooo#.",
-                "#ooooooooooooo#.",
-                "#oooooooooooo#..",
-                "#########ooo#...",
-                "........#oo#....",
-                "........#o#.....",
-                "........##......",
-                "........#.......",
-                "................",
-        }, (symbol, x, y) -> switch (symbol) {
-            case '#' -> outline;
-            case 'o' -> y < 8 ? light : base;
-            default -> 0;
-        });
-    }
-
-    private static int blend(int rgb, int target, float amount) {
-        int r = (int) (((rgb >> 16) & 0xFF) + ((((target >> 16) & 0xFF) - ((rgb >> 16) & 0xFF)) * amount));
-        int g = (int) (((rgb >> 8) & 0xFF) + ((((target >> 8) & 0xFF) - ((rgb >> 8) & 0xFF)) * amount));
-        int b = (int) ((rgb & 0xFF) + (((target & 0xFF) - (rgb & 0xFF)) * amount));
-        return (r << 16) | (g << 8) | b;
+    private static ResourceLocation sprite(String name) {
+        return ResourceLocation.fromNamespaceAndPath(BetterAutoCrafter.MODID, "container/better_auto_mover/" + name);
     }
 
     @Override
     protected void renderOptionIcon(GuiGraphics graphics, MachineOption<?> option, Enum<?> value, int x, int y) {
         if (option == BetterAutoMoverBlockEntity.GRID_MODE) {
-            (value == BetterAutoMoverBlockEntity.GridMode.EACH_SLOT ? EACH_SLOT_ICON : ALL_TOGETHER_ICON).render(graphics, x, y);
+            graphics.blitSprite(value == BetterAutoMoverBlockEntity.GridMode.EACH_SLOT ? EACH_SLOT_ICON : ALL_TOGETHER_ICON,
+                    x, y, ICON_SIZE, ICON_SIZE);
         }
-    }
-
-    /** Colours of the grid mode icons: '#' outline, 'o' a filled cell (lighter at the top), '=' seams, 'x' an empty cell. */
-    private static int gridIconColor(char symbol, int x, int y) {
-        return switch (symbol) {
-            case '#' -> 0xFF3B2A06;
-            case 'o' -> y < 8 ? 0xFFFFDE7A : 0xFFFFC13A;
-            case '=' -> 0xFFC98A12;
-            case 'x' -> 0xFF5A4630;
-            default -> 0;
-        };
     }
 
     // Arrows centered in the space left and right of the grid, at its middle row.
@@ -143,8 +68,8 @@ public class BetterAutoMoverScreen extends AutoMachineScreen<BetterAutoMoverMenu
     @Override
     protected void renderMachineBackground(GuiGraphics graphics) {
         super.renderMachineBackground(graphics);
-        INPUT_ARROW.render(graphics, inputArrowX(), arrowY());
-        OUTPUT_ARROW.render(graphics, outputArrowX(), arrowY());
+        graphics.blitSprite(INPUT_ARROW, inputArrowX(), arrowY(), ARROW_SIZE, ARROW_SIZE);
+        graphics.blitSprite(OUTPUT_ARROW, outputArrowX(), arrowY(), ARROW_SIZE, ARROW_SIZE);
     }
 
     @Override

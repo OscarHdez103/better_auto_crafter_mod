@@ -6,7 +6,9 @@ import java.util.Objects;
 import laseta.bac.BetterAutoCrafter;
 import laseta.bac.client.screen.AutoMachineScreen;
 import laseta.bac.client.screen.BetterAutoCrafterScreen;
+import laseta.bac.client.screen.BetterAutoBrewerScreen;
 import laseta.bac.client.screen.BetterAutoMoverScreen;
+import laseta.bac.client.screen.BetterAutoSmelterScreen;
 import laseta.bac.registry.ModItems;
 import laseta.bac.registry.ModRecipeTypes;
 import mezz.jei.api.IModPlugin;
@@ -41,11 +43,21 @@ public class JeiCompat implements IModPlugin {
         // Keep JEI's ingredient list and bookmarks clear of our side tabs.
         addTabAreas(registration, BetterAutoCrafterScreen.class);
         addTabAreas(registration, BetterAutoMoverScreen.class);
+        addTabAreas(registration, BetterAutoSmelterScreen.class);
+        addTabAreas(registration, BetterAutoBrewerScreen.class);
         // Clicking the arrow shows all recipes the crafter makes, like on the vanilla crafting table.
         registration.addRecipeClickArea(BetterAutoCrafterScreen.class,
                 BetterAutoCrafterScreen.ARROW_X, BetterAutoCrafterScreen.ARROW_Y,
                 BetterAutoCrafterScreen.ARROW_WIDTH, BetterAutoCrafterScreen.ARROW_HEIGHT,
                 RecipeTypes.CRAFTING, AutoCraftingCategory.TYPE);
+        registration.addRecipeClickArea(BetterAutoSmelterScreen.class,
+                BetterAutoSmelterScreen.ARROW_X, BetterAutoSmelterScreen.ARROW_Y,
+                BetterAutoSmelterScreen.ARROW_WIDTH, BetterAutoSmelterScreen.ARROW_HEIGHT,
+                RecipeTypes.CAMPFIRE_COOKING, RecipeTypes.BLASTING, RecipeTypes.SMOKING, RecipeTypes.SMELTING);
+        registration.addRecipeClickArea(BetterAutoBrewerScreen.class,
+                BetterAutoBrewerScreen.ARROW_X, BetterAutoBrewerScreen.ARROW_Y,
+                BetterAutoBrewerScreen.ARROW_WIDTH, BetterAutoBrewerScreen.ARROW_HEIGHT,
+                RecipeTypes.BREWING);
     }
 
     private static <S extends AutoMachineScreen<?>> void addTabAreas(IGuiHandlerRegistration registration, Class<S> screenClass) {
@@ -82,5 +94,8 @@ public class JeiCompat implements IModPlugin {
     @Override
     public void registerRecipeCatalysts(IRecipeCatalystRegistration registration) {
         registration.addRecipeCatalyst(ModItems.BETTER_AUTO_CRAFTER.get(), RecipeTypes.CRAFTING, AutoCraftingCategory.TYPE);
+        registration.addRecipeCatalyst(ModItems.BETTER_AUTO_SMELTER.get(), RecipeTypes.CAMPFIRE_COOKING, RecipeTypes.BLASTING,
+                RecipeTypes.SMOKING, RecipeTypes.SMELTING, RecipeTypes.FUELING);
+        registration.addRecipeCatalyst(ModItems.BETTER_AUTO_BREWER.get(), RecipeTypes.BREWING);
     }
 }

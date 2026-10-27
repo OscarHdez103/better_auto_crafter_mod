@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import laseta.bac.client.screen.widget.MachineSettingsTab;
+import laseta.bac.client.screen.widget.MachineStatusIcon;
 import laseta.bac.client.screen.widget.MachineTab;
 import laseta.bac.client.screen.widget.MachineText;
 import laseta.bac.client.screen.widget.SideConfigTab;
@@ -15,6 +16,7 @@ import laseta.bac.machine.AutoMachineBlock;
 import laseta.bac.machine.AutoMachineMenu;
 import laseta.bac.machine.MachineLayout;
 import laseta.bac.machine.MachineOption;
+import laseta.bac.menu.slot.MachineUpgradeSlot;
 import laseta.bac.menu.slot.UpgradeSlot;
 import laseta.bac.upgrade.UpgradeLayout;
 import laseta.bac.upgrade.UpgradeStatus;
@@ -29,10 +31,12 @@ import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 /**
- * Screen of an auto machine: a vanilla-style panel with the machine's slots, the side configuration and settings tabs on
- * the right, and on the left the upgrades tab and, for machines with options of their own, the machine tab. Subclasses
+ * Screen of an auto machine: a vanilla-style panel with the machine's slots and a status icon in its top right corner
+ * ({@link MachineStatusIcon}), the side configuration and settings tabs on the right, and on the left the upgrades tab
+ * and, for machines with features of their own, the machine tab. Subclasses
  * can draw their own background ({@link #renderMachineBackground}), give their options icons
  * ({@link #renderOptionIcon}) or add tabs ({@link #createRightTabs}, {@link #createLeftTabs}).
  */
@@ -45,12 +49,21 @@ public abstract class AutoMachineScreen<M extends AutoMachineMenu> extends Abstr
     private static final int SLOT_DARK = 0xFF373737;
     private static final int SLOT_LIGHT = 0xFFFFFFFF;
     private static final int SLOT_FILL = 0xFF8B8B8B;
+    private static final int AMOUNT_COLOR = 0xFFFFC94A;
+    /** Above the slots' items, like their own count. */
+    private static final float AMOUNT_Z = 300.0F;
+    /** Space between the status icon and the GUI's top and right edges (just inside the panel's bevel). */
+    private static final int STATUS_MARGIN = 4;
 
     /** Side configuration and settings, on the right. */
     private SideTabGroup rightTabs;
     /** Upgrades and the machine's own tab, on the left. */
     private SideTabGroup leftTabs;
     private UpgradesTab upgradesTab;
+    @Nullable
+    private MachineTab machineTab;
+    private MachineStatusIcon statusIcon;
+    private MachineText text;
     /** Set when a tab consumed a mouse press, so the matching release isn't handled as a slot click. */
     private boolean ignoreNextRelease;
 
@@ -71,9 +84,10 @@ public abstract class AutoMachineScreen<M extends AutoMachineMenu> extends Abstr
             state = menu.getMachineBlock().defaultBlockState();
         }
         Direction facing = state.getValue(AutoMachineBlock.FACING);
-        // Face textures always come from the normal (unpowered, not failed) model, so they don't change with the state.
+        // Face textures always come from the normal (not running, not failed) model, so they don't change with the state.
         BlockState unpowered = state.setValue(AutoMachineBlock.POWERED, false).setValue(AutoMachineBlock.FAILED, false);
-        MachineText text = new MachineText(menu.getMachineBlock());
+        text = new MachineText(menu.getMachineBlock());
+        statusIcon = new MachineStatusIcon(menu, text);
 
         rightTabs = new SideTabGroup("right", SideTab.Side.RIGHT, createRightTabs(text, unpowered, facing));
         rightTabs.setPosition(leftPos + imageWidth, topPos + UpgradeLayout.TAB_TOP);
@@ -82,6 +96,11 @@ public abstract class AutoMachineScreen<M extends AutoMachineMenu> extends Abstr
         upgradesTab.setGuiOrigin(leftPos, topPos);
         List<SideTab> left = new ArrayList<>();
         left.add(upgradesTab);
+        machineTab = menu.getFeatures().isEmpty() ? null : new MachineTab(menu, text, font, this::renderOptionIcon, unpowered, facing);
+        if (machineTab != null) {
+            machineTab.setGuiOrigin(leftPos, topPos);
+            left.add(machineTab);
+        }
         left.addAll(createLeftTabs(text));
         leftTabs = new SideTabGroup("left", SideTab.Side.LEFT, left);
         leftTabs.setPosition(leftPos, topPos + UpgradeLayout.TAB_TOP);
@@ -99,15 +118,45 @@ public abstract class AutoMachineScreen<M extends AutoMachineMenu> extends Abstr
     }
 
     /**
-     * The tabs on the left of the GUI below the upgrades tab (which stays first, so the upgrade slots never move): the
-     * machine tab, if the machine has options.
+     * More tabs on the left of the GUI, below the upgrades tab and the machine tab (which stay first, so the slots
+     * in them never move). None by default.
      */
     protected List<SideTab> createLeftTabs(MachineText text) {
-        return menu.getOptionTypes().isEmpty() ? List.of() : List.of(new MachineTab(menu, text, font, this::renderOptionIcon));
+        return List.of();
+    }
+
+    /** GUI texts, worded for this machine where its translations do. */
+    protected MachineText text() {
+        return text;
+    }
+
+    /**
+     * Writes how many items a slot takes per operation in its top right corner, small and gold, above its item (call
+     * from {@link #renderLabels}).
+     */
+    protected void drawSlotAmount(GuiGraphics graphics, Slot slot, int amount) {
+        final float scale = 0.75F;
+        Component label = Component.translatable("gui.better_auto_crafter.amount", amount);
+        graphics.pose().pushPose();
+        graphics.pose().translate(0, 0, AMOUNT_Z);
+        graphics.pose().scale(scale, scale, 1.0F);
+        int textX = (int) ((slot.x + 17) / scale) - font.width(label);  // right-aligned to the slot
+        graphics.drawString(font, label, textX, (int) (slot.y / scale), AMOUNT_COLOR, true);
+        graphics.pose().popPose();
     }
 
     /** Draws the 16x16 icon of a value of one of the machine's options, in the machine tab. Draws nothing by default. */
     protected void renderOptionIcon(GuiGraphics graphics, MachineOption<?> option, Enum<?> value, int x, int y) {
+    }
+
+    /** Left edge of the status icon, relative to the GUI. Screens with something else in that corner can move it. */
+    protected int statusIconX() {
+        return imageWidth - STATUS_MARGIN - MachineStatusIcon.SIZE;
+    }
+
+    /** Top edge of the status icon, relative to the GUI. */
+    protected int statusIconY() {
+        return STATUS_MARGIN;
     }
 
     /** Areas outside the main GUI that this screen draws on. Used by the JEI / EMI compat to keep their overlays clear. */
@@ -124,8 +173,16 @@ public abstract class AutoMachineScreen<M extends AutoMachineMenu> extends Abstr
     public void render(@NotNull GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         // The upgrade slots live in the upgrades tab: only show (and allow clicking) them while it is fully open.
         menu.setUpgradeSlotsVisible(upgradesTab.isFullyOpen());
+        // Same for the machine's own upgrade slots, which are only where the layout says once the upgrades tab is closed.
+        menu.setMachineUpgradeSlotsVisible(machineTab != null && machineTab.isFullyOpen() && upgradesTab.isFullyClosed());
         super.render(graphics, mouseX, mouseY, partialTick);
-        if (!rightTabs.renderTooltip(graphics, font, mouseX, mouseY) && !leftTabs.renderTooltip(graphics, font, mouseX, mouseY)) {
+        if (rightTabs.renderTooltip(graphics, font, mouseX, mouseY) || leftTabs.renderTooltip(graphics, font, mouseX, mouseY)) {
+            return;
+        }
+        if (menu.getCarried().isEmpty()
+                && MachineStatusIcon.isMouseOver(leftPos + statusIconX(), topPos + statusIconY(), mouseX, mouseY)) {
+            graphics.renderComponentTooltip(font, statusIcon.getTooltip(), mouseX, mouseY);
+        } else {
             renderTooltip(graphics, mouseX, mouseY);
         }
     }
@@ -133,15 +190,16 @@ public abstract class AutoMachineScreen<M extends AutoMachineMenu> extends Abstr
     @Override
     protected void renderBg(@NotNull GuiGraphics graphics, float partialTick, int mouseX, int mouseY) {
         renderMachineBackground(graphics);
+        statusIcon.render(graphics, leftPos + statusIconX(), topPos + statusIconY(), partialTick);
         rightTabs.render(graphics, font, mouseX, mouseY);
         leftTabs.render(graphics, font, mouseX, mouseY);
     }
 
-    /** The GUI's background: a vanilla-style panel with a frame behind every slot (the upgrades tab draws its own). */
+    /** The GUI's background: a vanilla-style panel with a frame behind every slot (the tabs draw their own). */
     protected void renderMachineBackground(GuiGraphics graphics) {
         drawPanel(graphics, leftPos, topPos, imageWidth, imageHeight);
         for (Slot slot : menu.slots) {
-            if (!(slot instanceof UpgradeSlot)) {
+            if (!(slot instanceof UpgradeSlot) && !(slot instanceof MachineUpgradeSlot)) {
                 drawSlot(graphics, leftPos + slot.x - 1, topPos + slot.y - 1);
             }
         }

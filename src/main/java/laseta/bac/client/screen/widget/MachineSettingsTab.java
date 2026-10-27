@@ -2,6 +2,7 @@ package laseta.bac.client.screen.widget;
 
 import java.util.List;
 
+import laseta.bac.BetterAutoCrafter;
 import laseta.bac.item.MultiTranslocationUpgradeItem;
 import laseta.bac.machine.AutoMachineMenu;
 import laseta.bac.machine.RedstoneMode;
@@ -15,6 +16,7 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import org.jetbrains.annotations.Nullable;
@@ -41,6 +43,8 @@ public class MachineSettingsTab extends SideTab {
     private static final int ON_COLOR = 0x8CF08C;
     private static final int OFF_COLOR = 0xFF9C94;
     private static final int NET_CELL = 0xFF2B1210;
+    /** Red cross drawn over the name tag while NBT matching is off. */
+    private static final ResourceLocation CROSSED_OUT = ResourceLocation.fromNamespaceAndPath(BetterAutoCrafter.MODID, "icon/crossed_out");
     private static final long ROUND_ROBIN_STEP_MS = 400;
     /** Above items rendered in the GUI, so overlays drawn on top of an item icon aren't hidden behind it. */
     private static final float OVERLAY_Z = 200.0F;
@@ -161,12 +165,8 @@ public class MachineSettingsTab extends SideTab {
         }
         graphics.pose().pushPose();
         graphics.pose().translate(0, 0, OVERLAY_Z);
-        graphics.fill(x, y, x + 16, y + 16, 0x60000000);
-        int cross = 0xFF000000 | 0xE53935;
-        for (int i = 2; i < 14; i++) {
-            graphics.fill(x + i, y + i, x + i + 2, y + i + 1, cross);
-            graphics.fill(x + 15 - i - 1, y + i, x + 15 - i + 1, y + i + 1, cross);
-        }
+        graphics.fill(x, y, x + ICON_SIZE, y + ICON_SIZE, 0x60000000);
+        graphics.blitSprite(CROSSED_OUT, x, y, ICON_SIZE, ICON_SIZE);
         graphics.pose().popPose();
     }
 

@@ -10,12 +10,12 @@ public enum RedstoneMode {
     OFF,
     /** Runs once every time the signal turns on (rising edge). */
     ON_POWERED,
-    /** Runs every {@link #CONTINUOUS_INTERVAL} ticks while powered. */
+    /** Keeps running while powered: tries every {@link #CONTINUOUS_INTERVAL} ticks when not cooling down. */
     CONSTANT,
-    /** Runs every {@link #CONTINUOUS_INTERVAL} ticks while NOT powered. */
+    /** Keeps running while NOT powered, like {@link #CONSTANT}. */
     INVERTED;
 
-    /** Game ticks between attempts in the continuous modes. */
+    /** Game ticks between attempts in the continuous modes (after a failed one; a success starts the cooldown). */
     public static final int CONTINUOUS_INTERVAL = 2;
 
     private static final RedstoneMode[] VALUES = values();

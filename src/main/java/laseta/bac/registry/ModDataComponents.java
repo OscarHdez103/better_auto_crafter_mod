@@ -9,6 +9,7 @@ import net.minecraft.core.GlobalPos;
 import net.minecraft.core.component.DataComponentType;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.world.item.component.ItemContainerContents;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
@@ -31,6 +32,14 @@ public final class ModDataComponents {
             "translocation_targets",
             builder -> builder.persistent(LinkedFace.CODEC.listOf())
                     .networkSynchronized(LinkedFace.STREAM_CODEC.apply(ByteBufCodecs.list())));
+
+    /**
+     * The item an upgrade is set to in a machine's tab (e.g. what a Potion Starter Upgrade starts brews from). Kept in
+     * vanilla's item list component, which compares by content, so upgrades set to the same item still stack.
+     */
+    public static final Supplier<DataComponentType<ItemContainerContents>> UPGRADE_SETTING = DATA_COMPONENTS.registerComponentType(
+            "upgrade_setting",
+            builder -> builder.persistent(ItemContainerContents.CODEC).networkSynchronized(ItemContainerContents.STREAM_CODEC));
 
     private ModDataComponents() {
     }

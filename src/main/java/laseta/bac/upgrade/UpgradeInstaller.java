@@ -1,6 +1,7 @@
 package laseta.bac.upgrade;
 
 import laseta.bac.machine.AutoMachineBlockEntity;
+import laseta.bac.machine.MachineUpgradeInventory;
 import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
@@ -9,9 +10,11 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
+import net.neoforged.neoforge.items.ItemStackHandler;
 
 /**
- * Sneak + use with an upgrade on an auto machine installs one upgrade without opening the GUI. If the slot
+ * Sneak + use with an upgrade on an auto machine installs one upgrade without opening the GUI, in the upgrade slots every
+ * machine has or in the machine's own ones. If the slot
  * holds a different upgrade (e.g. a basic pull upgrade when installing a dimensional one), that one is swapped out
  * and given back to the player.
  */
@@ -24,23 +27,28 @@ public final class UpgradeInstaller {
         Player player = context.getPlayer();
         Level level = context.getLevel();
         ItemStack held = context.getItemInHand();
-        UpgradeSlotType type = UpgradeSlotType.forStack(held);
-        if (player == null || !player.isSecondaryUseActive() || type == null
+        if (player == null || !player.isSecondaryUseActive()
                 || !(level.getBlockEntity(context.getClickedPos()) instanceof AutoMachineBlockEntity machine)) {
+            return InteractionResult.PASS;
+        }
+        UpgradeSlotType type = UpgradeSlotType.forStack(held);
+        MachineUpgradeInventory machineUpgrades = machine.getMachineUpgrades();
+        int machineSlot = type == null ? machineUpgrades.slotFor(held) : -1;
+        if (type == null && machineSlot < 0) {
             return InteractionResult.PASS;
         }
         if (level.isClientSide) {
             return InteractionResult.SUCCESS;
         }
 
-        UpgradeInventory upgrades = machine.getUpgrades();
-        int slot = type.ordinal();
+        ItemStackHandler upgrades = type != null ? machine.getUpgrades() : machineUpgrades;
+        int slot = type != null ? type.ordinal() : machineSlot;
+        Component slotName = type != null ? type.getDisplayName() : machineUpgrades.types().get(machineSlot).getDisplayName();
         ItemStack installed = upgrades.getStackInSlot(slot);
         ItemStack returned = ItemStack.EMPTY;
         if (installed.isEmpty() || ItemStack.isSameItemSameComponents(installed, held)) {
             if (installed.getCount() >= upgrades.getSlotLimit(slot)) {
-                player.displayClientMessage(Component.translatable("gui.better_auto_crafter.upgrade_slot.full",
-                        type.getDisplayName()), true);
+                player.displayClientMessage(Component.translatable("gui.better_auto_crafter.upgrade_slot.full", slotName), true);
                 return InteractionResult.CONSUME;
             }
             upgrades.setStackInSlot(slot, held.copyWithCount(installed.getCount() + 1));

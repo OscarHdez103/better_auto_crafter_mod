@@ -3,7 +3,9 @@ package laseta.bac.registry;
 import java.util.function.Supplier;
 
 import laseta.bac.BetterAutoCrafter;
+import laseta.bac.recipe.AutoBrewingRecipe;
 import laseta.bac.recipe.AutoCraftingRecipe;
+import laseta.bac.recipe.AutoSmeltingRecipe;
 import laseta.bac.recipe.UpgradeLinkResetRecipe;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.item.crafting.RecipeSerializer;
@@ -22,6 +24,12 @@ public final class ModRecipeSerializers {
 
     public static final Supplier<AutoCraftingRecipe.Serializer> AUTO_CRAFTING =
             RECIPE_SERIALIZERS.register("auto_crafting", AutoCraftingRecipe.Serializer::new);
+
+    public static final Supplier<AutoSmeltingRecipe.Serializer> AUTO_SMELTING =
+            RECIPE_SERIALIZERS.register("auto_smelting", AutoSmeltingRecipe.Serializer::new);
+
+    public static final Supplier<AutoBrewingRecipe.Serializer> AUTO_BREWING =
+            RECIPE_SERIALIZERS.register("auto_brewing", AutoBrewingRecipe.Serializer::new);
 
     private ModRecipeSerializers() {
     }

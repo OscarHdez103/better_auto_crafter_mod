@@ -5,26 +5,23 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 
+import laseta.bac.BetterAutoCrafter;
 import laseta.bac.item.MultiTranslocationUpgradeItem;
 import laseta.bac.machine.AutoMachineMenu;
 import laseta.bac.sideconfig.RelativeSide;
 import laseta.bac.sideconfig.SideMode;
 import laseta.bac.upgrade.UpgradeSlotType;
 import net.minecraft.ChatFormatting;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.renderer.block.model.BakedQuad;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
-import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
-import net.minecraft.util.RandomSource;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
-import net.neoforged.neoforge.client.model.data.ModelData;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -35,6 +32,8 @@ import org.jetbrains.annotations.Nullable;
 public class SideConfigTab extends SideTab {
     private static final Component TITLE = Component.translatable("gui.better_auto_crafter.side_config");
     private static final Palette PALETTE = new Palette(0xFF0F1B2A, 0xFF3C6C9E, 0xFF6F9DCC, 0xFF2A4D73);
+    /** Cog, shaded as if lit from the top left. */
+    private static final ResourceLocation ICON = ResourceLocation.fromNamespaceAndPath(BetterAutoCrafter.MODID, "icon/side_config");
 
     private static final int BUTTON_SIZE = 18;
     private static final int BUTTON_GAP = 2;
@@ -68,14 +67,12 @@ public class SideConfigTab extends SideTab {
         this.menu = menu;
         this.text = text;
         this.facing = facing;
-        for (RelativeSide side : RelativeSide.values()) {
-            faceSprites.put(side, findFaceSprite(blockState, side.toDirection(facing)));
-        }
+        faceSprites.putAll(FaceSprites.of(blockState, facing));
     }
 
     @Override
     protected void renderIcon(GuiGraphics graphics, int x, int y) {
-        CogIcon.render(graphics, x, y);
+        graphics.blitSprite(ICON, x, y, ICON_SIZE, ICON_SIZE);
     }
 
     private int buttonX(int column) {
@@ -211,12 +208,5 @@ public class SideConfigTab extends SideTab {
         }
         sendMenuButton(menu, buttonId);
         return true;
-    }
-
-    /** Texture actually used by the block model on that face, so resource packs / model changes are reflected. */
-    private static TextureAtlasSprite findFaceSprite(BlockState state, Direction direction) {
-        BakedModel model = Minecraft.getInstance().getBlockRenderer().getBlockModel(state);
-        List<BakedQuad> quads = model.getQuads(state, direction, RandomSource.create(42L), ModelData.EMPTY, null);
-        return quads.isEmpty() ? model.getParticleIcon(ModelData.EMPTY) : quads.getFirst().getSprite();
     }
 }

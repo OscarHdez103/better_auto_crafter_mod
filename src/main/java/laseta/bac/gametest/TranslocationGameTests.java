@@ -7,6 +7,7 @@ import laseta.bac.BetterAutoCrafter;
 import laseta.bac.block.TranslocatorBlock;
 import laseta.bac.block.entity.BetterAutoCrafterBlockEntity;
 import laseta.bac.machine.AutoMachineBlock;
+import laseta.bac.machine.MachineProblem;
 import laseta.bac.machine.RedstoneMode;
 import laseta.bac.item.TranslocationUpgradeItem;
 import laseta.bac.menu.BetterAutoCrafterMenu;
@@ -252,7 +253,7 @@ public final class TranslocationGameTests {
         CompoundTag saved = old.serializeNBT(helper.getLevel().registryAccess());
 
         UpgradeInventory upgrades = new UpgradeInventory(() -> {
-        });
+        }, UpgradeSlotType::getMaxStackSize);
         upgrades.deserializeNBT(helper.getLevel().registryAccess(), saved);
         helper.assertTrue(upgrades.getSlots() == UpgradeSlotType.COUNT, "must keep all current slots, has " + upgrades.getSlots());
         helper.assertTrue(upgrades.getStackInSlot(0).is(ModItems.TRANSLOCATION_UPGRADE_PULL.get()), "saved upgrade kept");
@@ -371,22 +372,30 @@ public final class TranslocationGameTests {
     }
 
     @GameTest(template = TEMPLATE)
-    public static void shiftClickMovesOneUpgradeAtATime(GameTestHelper helper) {
+    public static void shiftClickFillsTheUpgradeSlot(GameTestHelper helper) {
         BetterAutoCrafterBlockEntity crafter = placeStickCrafter(helper);
         Player player = helper.makeMockPlayer(GameType.SURVIVAL);
         BetterAutoCrafterMenu menu = new BetterAutoCrafterMenu(0, player.getInventory(), crafter);
         int firstInventorySlot = BetterAutoCrafterBlockEntity.GRID_SIZE + 1; // player inventory slot 9
-        player.getInventory().setItem(9, new ItemStack(ModItems.STOCKING_UPGRADE.get(), 10));
+        List<ItemStack> grid = crafter.getTemplateStacks().stream().map(ItemStack::copy).toList();
 
+        player.getInventory().setItem(9, new ItemStack(ModItems.STOCKING_UPGRADE.get(), 10));
         menu.clicked(firstInventorySlot, 0, ClickType.QUICK_MOVE, player);
-        menu.clicked(firstInventorySlot, 0, ClickType.QUICK_MOVE, player);
-        helper.assertTrue(crafter.getUpgrades().get(UpgradeSlotType.STOCKING).getCount() == 2, "one per shift-click");
-        helper.assertTrue(player.getInventory().getItem(9).getCount() == 8, "the rest stays where it was");
+        helper.assertTrue(crafter.getUpgrades().get(UpgradeSlotType.STOCKING).getCount() == 10, "the whole stack fits");
+        helper.assertTrue(player.getInventory().getItem(9).isEmpty(), "nothing left behind");
 
         player.getInventory().setItem(9, new ItemStack(ModItems.TRANSLOCATION_UPGRADE_PUSH.get(), 4));
         menu.clicked(firstInventorySlot, 0, ClickType.QUICK_MOVE, player);
-        helper.assertTrue(crafter.getUpgrades().get(UpgradeSlotType.TRANSLOCATION_PUSH).getCount() == 1, "push upgrade installed");
-        helper.assertTrue(player.getInventory().getItem(9).getCount() == 3, "three push upgrades stay in the inventory");
+        helper.assertTrue(crafter.getUpgrades().get(UpgradeSlotType.TRANSLOCATION_PUSH).getCount() == 1, "as many as the slot holds");
+        helper.assertTrue(player.getInventory().getItem(9).getCount() == 3, "the rest stays in the inventory");
+
+        // The slot is full: the rest stays put instead of going into the grid.
+        menu.clicked(firstInventorySlot, 0, ClickType.QUICK_MOVE, player);
+        helper.assertTrue(player.getInventory().getItem(9).getCount() == 3, "a full slot takes nothing");
+        List<ItemStack> after = crafter.getTemplateStacks();
+        for (int i = 0; i < grid.size(); i++) {
+            helper.assertTrue(ItemStack.matches(grid.get(i), after.get(i)), "grid untouched");
+        }
         helper.succeed();
     }
 
@@ -408,7 +417,9 @@ public final class TranslocationGameTests {
         helper.runAfterDelay(SETTLE, () -> {
             assertCount(helper, input, Items.OAK_PLANKS, 10, "nothing pulled");
             assertCount(helper, output, Items.STICK, 2, "no sticks added");
-            helper.assertBlockProperty(CRAFTER, AutoMachineBlock.FAILED, true);
+            // Having nothing to do isn't a failure.
+            helper.assertBlockProperty(CRAFTER, AutoMachineBlock.FAILED, false);
+            helper.assertTrue(crafter.getStatus().getLastProblem() == MachineProblem.STOCKED, "says it is stocked");
             helper.succeed();
         });
     }

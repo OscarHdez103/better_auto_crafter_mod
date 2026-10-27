@@ -121,13 +121,13 @@ public final class MultiTranslocationGameTests {
         install(crafter, UpgradeSlotType.TRANSLOCATION_PUSH,
                 linked(helper, ModItems.MULTI_TRANSLOCATION_UPGRADE_PUSH.get(), face(A, Direction.UP), face(B, Direction.UP)));
 
-        helper.assertTrue(crafter.attemptOperation() && crafter.attemptOperation(), "two crafts");
+        helper.assertTrue(craftTwice(crafter), "two crafts");
         assertCount(helper, a, Items.STICK, 4, "first craft into the first linked chest");
         assertCount(helper, b, Items.STICK, 4, "round robin: second craft into the second one");
 
         // A face priority has no face to prefer among linked blocks: they are used in link order.
         crafter.getSettings().setOutputPriority(TransferPriority.FRONT);
-        helper.assertTrue(crafter.attemptOperation() && crafter.attemptOperation(), "two more crafts");
+        helper.assertTrue(craftTwice(crafter), "two more crafts");
         assertCount(helper, a, Items.STICK, 12, "link order: both into the first linked chest");
         helper.succeed();
     }
@@ -148,6 +148,7 @@ public final class MultiTranslocationGameTests {
         helper.assertTrue(crafter.attemptOperation(), "crafts from the furnace's result slot");
         helper.assertTrue(furnace.getItem(2).isEmpty(), "result slot emptied");
         helper.assertTrue(furnace.getItem(0).getCount() == 10, "input slot untouched");
+        crafter.getStatus().endCooldown();
         helper.assertTrue(!crafter.attemptOperation(), "nothing left on the linked face");
         assertCount(helper, output, Items.STICK, 4, "one craft");
         helper.succeed();
@@ -424,6 +425,14 @@ public final class MultiTranslocationGameTests {
     // ---------------------------------------------------------------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------------------------------------------------------------
+
+    /** Two operations right after each other, skipping the cooldowns. */
+    private static boolean craftTwice(BetterAutoCrafterBlockEntity crafter) {
+        crafter.getStatus().endCooldown();
+        boolean first = crafter.attemptOperation();
+        crafter.getStatus().endCooldown();
+        return first && crafter.attemptOperation();
+    }
 
     private static BetterAutoCrafterBlockEntity placeStickCrafter(GameTestHelper helper) {
         helper.setBlock(CRAFTER, ModBlocks.BETTER_AUTO_CRAFTER.get().defaultBlockState()

@@ -27,14 +27,20 @@ import org.jetbrains.annotations.Nullable;
 
 /**
  * Block of an auto machine (see {@link AutoMachineBlockEntity}): faces a direction, follows its redstone signal, runs
- * on a rising edge in the "on powered" mode, shows a failed operation for a moment, and opens the machine's GUI.
+ * on a rising edge in the "on powered" mode, shows when it is running and a failed operation for a moment, and opens
+ * the machine's GUI.
  * Subclasses only add their block entity and, optionally, their own sounds.
  */
 public abstract class AutoMachineBlock extends BaseEntityBlock {
     /** Direction the front of the block points to. Side configuration is stored relative to it. */
     public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
-    /** True while the block receives a redstone signal. In the "on powered" mode it runs when this turns true. */
+    /**
+     * True while the machine runs: during the time each operation takes (see {@link AutoMachineBlockEntity#getBaseSpeed()}),
+     * whatever the redstone mode and signal. Purely visual; kept in sync by the block entity.
+     */
     public static final BooleanProperty POWERED = BlockStateProperties.POWERED;
+    /** True while the block receives a redstone signal. In the "on powered" mode it runs when this turns true. Not shown. */
+    public static final BooleanProperty TRIGGERED = BlockStateProperties.TRIGGERED;
     /**
      * True for a short time after an operation failed (missing items, no room for the output, ...).
      * Purely visual; cleared by the block entity after {@link AutoMachineBlockEntity#FAILED_DISPLAY_TICKS}.
@@ -46,7 +52,7 @@ public abstract class AutoMachineBlock extends BaseEntityBlock {
     protected AutoMachineBlock(Properties properties) {
         super(properties);
         registerDefaultState(stateDefinition.any().setValue(FACING, Direction.NORTH)
-                .setValue(POWERED, false).setValue(FAILED, false));
+                .setValue(POWERED, false).setValue(TRIGGERED, false).setValue(FAILED, false));
     }
 
     /** The block entity type of this machine; the ticker only runs for it. */
@@ -60,7 +66,7 @@ public abstract class AutoMachineBlock extends BaseEntityBlock {
 
     @Override
     protected void createBlockStateDefinition(StateDefinition.@NotNull Builder<Block, BlockState> builder) {
-        builder.add(FACING, POWERED, FAILED);
+        builder.add(FACING, POWERED, TRIGGERED, FAILED);
     }
 
     @Override
@@ -68,11 +74,11 @@ public abstract class AutoMachineBlock extends BaseEntityBlock {
         // Front faces the player who placed it. Placing it next to a powered source doesn't run it (no rising edge).
         return defaultBlockState()
                 .setValue(FACING, context.getHorizontalDirection().getOpposite())
-                .setValue(POWERED, context.getLevel().hasNeighborSignal(context.getClickedPos()));
+                .setValue(TRIGGERED, context.getLevel().hasNeighborSignal(context.getClickedPos()));
     }
 
     /**
-     * Keeps {@link #POWERED} in sync with the redstone signal (used by every redstone mode), and in the
+     * Keeps {@link #TRIGGERED} in sync with the redstone signal (used by every redstone mode), and in the
      * "on powered" mode detects the rising edge, like the vanilla Crafter / Dispenser. The operation itself runs in
      * {@link #tick}, never in the middle of a neighbour update: it touches other blocks' inventories, which can cause
      * more block updates, so doing it here could re-enter this method.
@@ -84,22 +90,24 @@ public abstract class AutoMachineBlock extends BaseEntityBlock {
             return;
         }
         boolean powered = level.hasNeighborSignal(pos);
-        boolean wasPowered = state.getValue(POWERED);
+        boolean wasPowered = state.getValue(TRIGGERED);
         if (powered && !wasPowered) {
             if (getRedstoneMode(level, pos) == RedstoneMode.ON_POWERED) {
                 level.scheduleTick(pos, this, OPERATION_DELAY);
             }
-            level.setBlock(pos, state.setValue(POWERED, true), Block.UPDATE_CLIENTS);
+            level.setBlock(pos, state.setValue(TRIGGERED, true), Block.UPDATE_CLIENTS);
         } else if (!powered && wasPowered) {
-            level.setBlock(pos, state.setValue(POWERED, false), Block.UPDATE_CLIENTS);
+            level.setBlock(pos, state.setValue(TRIGGERED, false), Block.UPDATE_CLIENTS);
         }
     }
 
     @Override
     protected void tick(@NotNull BlockState state, @NotNull ServerLevel level, @NotNull BlockPos pos, @NotNull RandomSource random) {
-        // The mode may have been changed in the tick between the rising edge and now.
+        // The mode may have been changed in the tick between the rising edge and now. A pulse during the cooldown is
+        // ignored, silently: the machine isn't ready for it.
         if (level.getBlockEntity(pos) instanceof AutoMachineBlockEntity blockEntity
-                && blockEntity.getSettings().getRedstoneMode() == RedstoneMode.ON_POWERED) {
+                && blockEntity.getSettings().getRedstoneMode() == RedstoneMode.ON_POWERED
+                && !blockEntity.isCoolingDown()) {
             boolean success = blockEntity.attemptOperation();
             // Sounds only in this mode: the continuous modes would play them every 2 ticks.
             level.levelEvent(success ? getSuccessSound() : getFailSound(), pos, 0);
@@ -128,7 +136,7 @@ public abstract class AutoMachineBlock extends BaseEntityBlock {
                 : RedstoneMode.OFF;
     }
 
-    /** Server only: drives the continuous redstone modes and clears the failed state after its time. */
+    /** Server only: drives the continuous redstone modes and keeps the running and failed states up to date. */
     @Nullable
     @Override
     public <T extends BlockEntity> BlockEntityTicker<T> getTicker(@NotNull Level level, @NotNull BlockState state,

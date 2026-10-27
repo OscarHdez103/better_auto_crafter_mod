@@ -6,6 +6,7 @@ import laseta.bac.CommonConfig;
 import laseta.bac.machine.AutoMachineBlockEntity;
 import laseta.bac.machine.ItemTransfer;
 import laseta.bac.machine.MachineOption;
+import laseta.bac.machine.MachineProblem;
 import laseta.bac.menu.BetterAutoMoverMenu;
 import laseta.bac.registry.ModBlockEntities;
 import net.minecraft.core.BlockPos;
@@ -54,10 +55,19 @@ public class BetterAutoMoverBlockEntity extends AutoMachineBlockEntity {
     }
 
     @Override
+    protected int getBaseSpeed() {
+        return CommonConfig.moverBaseSpeed();
+    }
+
+    @Override
     protected boolean operate(ServerLevel level, ItemTransfer transfer) {
         List<ItemStack> wanted = getTemplateStacks().stream()
                 .map(stack -> transfer.isStocked(stack) ? ItemStack.EMPTY : stack)
                 .toList();
+        if (wanted.stream().allMatch(ItemStack::isEmpty)) {
+            // The template isn't empty (checked before): everything in it is stocked already.
+            return transfer.fail(MachineProblem.STOCKED);
+        }
         // Nothing is made: what was pulled is pushed, one stack per kind of item.
         ItemTransfer.Process process = pulled -> ItemTransfer.Output.of(ItemTransfer.merge(pulled));
         return getOptions().get(GRID_MODE) == GridMode.EACH_SLOT

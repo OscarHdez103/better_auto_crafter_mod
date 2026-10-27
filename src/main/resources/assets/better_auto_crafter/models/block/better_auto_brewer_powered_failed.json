@@ -1,0 +1,12 @@
+{
+  "parent": "minecraft:block/cube",
+  "textures": {
+    "particle": "better_auto_crafter:block/brewer/better_auto_brewer_front_powered_failed",
+    "north": "better_auto_crafter:block/brewer/better_auto_brewer_front_powered_failed",
+    "south": "better_auto_crafter:block/brewer/better_auto_brewer_side_powered_failed",
+    "east": "better_auto_crafter:block/brewer/better_auto_brewer_side_powered_failed",
+    "west": "better_auto_crafter:block/brewer/better_auto_brewer_side_powered_failed",
+    "up": "better_auto_crafter:block/brewer/better_auto_brewer_top_powered_failed",
+    "down": "better_auto_crafter:block/brewer/better_auto_brewer_bottom_powered_failed"
+  }
+}

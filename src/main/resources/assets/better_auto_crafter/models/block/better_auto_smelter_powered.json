@@ -1,0 +1,12 @@
+{
+  "parent": "minecraft:block/cube",
+  "textures": {
+    "particle": "better_auto_crafter:block/smelter/better_auto_smelter_front_powered",
+    "north": "better_auto_crafter:block/smelter/better_auto_smelter_front_powered",
+    "south": "better_auto_crafter:block/smelter/better_auto_smelter_side_powered",
+    "east": "better_auto_crafter:block/smelter/better_auto_smelter_side_powered",
+    "west": "better_auto_crafter:block/smelter/better_auto_smelter_side_powered",
+    "up": "better_auto_crafter:block/smelter/better_auto_smelter_top_powered",
+    "down": "better_auto_crafter:block/smelter/better_auto_smelter_bottom_powered"
+  }
+}

@@ -29,10 +29,6 @@ public class BetterAutoCrafterScreen extends AutoMachineScreen<BetterAutoCrafter
     public static final int ARROW_WIDTH = 22;
     public static final int ARROW_HEIGHT = 15;
 
-    private static final int AMOUNT_COLOR = 0xFFFFC94A;
-    /** Above the grid's items, like their own count. */
-    private static final float AMOUNT_Z = 300.0F;
-
     public BetterAutoCrafterScreen(BetterAutoCrafterMenu menu, Inventory playerInventory, Component title) {
         super(menu, playerInventory, title);
         this.titleLabelX = 29;
@@ -46,22 +42,12 @@ public class BetterAutoCrafterScreen extends AutoMachineScreen<BetterAutoCrafter
     @Override
     protected void renderLabels(@NotNull GuiGraphics graphics, int mouseX, int mouseY) {
         super.renderLabels(graphics, mouseX, mouseY);
-        graphics.pose().pushPose();
-        graphics.pose().translate(0, 0, AMOUNT_Z);
         for (Slot slot : menu.slots) {
             int amount = menu.getAmount(slot);
             if (amount > 1) {
-                final float AMOUNT_SCALE = 0.75F;
-                Component label = Component.translatable("gui.better_auto_crafter.amount", amount);
-                graphics.pose().pushPose();
-                graphics.pose().scale(AMOUNT_SCALE, AMOUNT_SCALE, 1.0F);
-                int textX = (int) ((slot.x + 17) / AMOUNT_SCALE) - font.width(label);  // right-aligned to the slot
-                int textY = (int) ((slot.y + 17) / AMOUNT_SCALE) - font.lineHeight;    // bottom-aligned
-                graphics.drawString(font, label, textX, (int)(slot.y / AMOUNT_SCALE), AMOUNT_COLOR, true);
-                graphics.pose().popPose();
+                drawSlotAmount(graphics, slot, amount);
             }
         }
-        graphics.pose().popPose();
     }
 
     @Override

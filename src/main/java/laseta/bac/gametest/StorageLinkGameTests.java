@@ -7,6 +7,7 @@ import laseta.bac.BetterAutoCrafter;
 import laseta.bac.block.entity.BetterAutoCrafterBlockEntity;
 import laseta.bac.compat.StorageLinkIntegrations;
 import laseta.bac.machine.AutoMachineBlock;
+import laseta.bac.machine.MachineProblem;
 import laseta.bac.machine.RedstoneMode;
 import laseta.bac.item.LinkingUpgradeItem;
 import laseta.bac.registry.ModBlocks;
@@ -88,7 +89,9 @@ public final class StorageLinkGameTests {
         helper.runAfterDelay(SETTLE, () -> {
             assertCount(helper, input, Items.OAK_PLANKS, 10, "nothing pulled");
             assertCount(helper, output, Items.STICK, 0, "nothing crafted");
-            helper.assertBlockProperty(CRAFTER, AutoMachineBlock.FAILED, true);
+            // Having nothing to do isn't a failure.
+            helper.assertBlockProperty(CRAFTER, AutoMachineBlock.FAILED, false);
+            helper.assertTrue(crafter.getStatus().getLastProblem() == MachineProblem.STOCKED, "says it is stocked");
             helper.assertTrue(crafter.getUpgradeStatus(UpgradeSlotType.STORAGE_LINK) == UpgradeStatus.ACTIVE, "link works");
             helper.succeed();
         });

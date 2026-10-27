@@ -2,6 +2,7 @@ package laseta.bac.client.screen.widget;
 
 import java.util.List;
 
+import laseta.bac.BetterAutoCrafter;
 import laseta.bac.machine.AutoMachineMenu;
 import laseta.bac.upgrade.UpgradeLayout;
 import laseta.bac.upgrade.UpgradeSlotType;
@@ -11,6 +12,7 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.inventory.Slot;
 import org.jetbrains.annotations.Nullable;
 
@@ -25,40 +27,12 @@ public class UpgradesTab extends SideTab {
     private static final Component DESCRIPTION = Component.translatable("gui.better_auto_crafter.upgrades.description");
     private static final Palette PALETTE = new Palette(0xFF0E2410, 0xFF3E8E41, 0xFF6CC070, 0xFF2A632C);
 
-    // Vanilla slot colours
-    private static final int SLOT_DARK = 0xFF373737;
-    private static final int SLOT_LIGHT = 0xFFFFFFFF;
-    private static final int SLOT_FILL = 0xFF8B8B8B;
-    private static final int GHOST_FADE = 0xB08B8B8B;
     private static final int ACTIVE_FRAME = 0xFF55E055;
     private static final int PROBLEM_FRAME = 0xFFFF4040;
     private static final int WARNING_FRAME = 0xFFFFC020;
-    /** Above items rendered in the GUI, so the fade drawn over the ghost icon isn't hidden behind it. */
-    private static final float OVERLAY_Z = 200.0F;
 
-    /** Upward arrow: '#' outline, 'o' arrow (lighter on its left half). */
-    private static final PixelIcon ICON = new PixelIcon(new String[]{
-            "................",
-            ".......##.......",
-            "......#oo#......",
-            ".....#oooo#.....",
-            "....#oooooo#....",
-            "...#oooooooo#...",
-            "..#oooooooooo#..",
-            "..####oooo####..",
-            ".....#oooo#.....",
-            ".....#oooo#.....",
-            ".....#oooo#.....",
-            ".....#oooo#.....",
-            ".....#oooo#.....",
-            ".....######.....",
-            "................",
-            "................",
-    }, (symbol, x, y) -> switch (symbol) {
-        case '#' -> 0xFF1B3A1C;
-        case 'o' -> x < 8 ? 0xFFFFE082 : 0xFFFFC107;
-        default -> 0;
-    });
+    /** Upward arrow, lighter on its left half. */
+    private static final ResourceLocation ICON = ResourceLocation.fromNamespaceAndPath(BetterAutoCrafter.MODID, "icon/upgrades");
 
     private final AutoMachineMenu menu;
     private int guiLeft;
@@ -77,7 +51,7 @@ public class UpgradesTab extends SideTab {
 
     @Override
     protected void renderIcon(GuiGraphics graphics, int x, int y) {
-        ICON.render(graphics, x, y);
+        graphics.blitSprite(ICON, x, y, ICON_SIZE, ICON_SIZE);
     }
 
     /** The 18x18 frame around a slot, in screen coordinates. */
@@ -101,32 +75,19 @@ public class UpgradesTab extends SideTab {
     protected void renderContent(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
         for (UpgradeSlotType type : UpgradeSlotType.values()) {
             ScreenRectangle frame = frame(type);
-            int left = frame.left();
-            int top = frame.top();
-            int right = frame.right();
-            int bottom = frame.bottom();
             UpgradeStatus status = menu.getUpgradeStatus(type);
             boolean installed = menu.getUpgradeSlot(type).hasItem();
 
             if (installed && status != UpgradeStatus.EMPTY) {
                 // Coloured frame instead of the bevel: green = working, yellow = partly working, red = not working.
-                graphics.fill(left, top, right, bottom,
+                SlotWidgets.drawColoredSlot(graphics, frame.left(), frame.top(),
                         status.isProblem() ? PROBLEM_FRAME : status.isWarning() ? WARNING_FRAME : ACTIVE_FRAME);
             } else {
-                graphics.fill(left, top, right - 1, top + 1, SLOT_DARK);
-                graphics.fill(left, top + 1, left + 1, bottom - 1, SLOT_DARK);
-                graphics.fill(left + 1, bottom - 1, right, bottom, SLOT_LIGHT);
-                graphics.fill(right - 1, top + 1, right, bottom - 1, SLOT_LIGHT);
+                SlotWidgets.drawSlot(graphics, frame.left(), frame.top());
             }
-            graphics.fill(left + 1, top + 1, right - 1, bottom - 1, SLOT_FILL);
-
             if (!installed) {
                 // Faded icon of the upgrade that goes here.
-                graphics.renderFakeItem(type.getIcon(), left + 1, top + 1);
-                graphics.pose().pushPose();
-                graphics.pose().translate(0, 0, OVERLAY_Z);
-                graphics.fill(left + 1, top + 1, right - 1, bottom - 1, GHOST_FADE);
-                graphics.pose().popPose();
+                SlotWidgets.drawGhostItem(graphics, type.getIcon(), frame.left(), frame.top());
             }
         }
     }
@@ -140,7 +101,7 @@ public class UpgradesTab extends SideTab {
             return null;
         }
         return new Hover(List.of(type.getDisplayName(),
-                type.getDescription().copy().withStyle(ChatFormatting.GRAY)),
+                type.getDescription(menu.getUpgradeSlot(type).getMaxStackSize()).copy().withStyle(ChatFormatting.GRAY)),
                 frame(type));
     }
 

@@ -3,8 +3,10 @@ package laseta.bac.block.entity;
 import java.util.ArrayList;
 import java.util.List;
 
+import laseta.bac.CommonConfig;
 import laseta.bac.machine.AutoMachineBlockEntity;
 import laseta.bac.machine.ItemTransfer;
+import laseta.bac.machine.MachineProblem;
 import laseta.bac.menu.BetterAutoCrafterMenu;
 import laseta.bac.recipe.AutoCraftingRecipe;
 import laseta.bac.registry.ModBlockEntities;
@@ -45,6 +47,11 @@ public class BetterAutoCrafterBlockEntity extends AutoMachineBlockEntity {
 
     public BetterAutoCrafterBlockEntity(BlockPos pos, BlockState state) {
         super(ModBlockEntities.BETTER_AUTO_CRAFTER.get(), pos, state, GRID_WIDTH, GRID_HEIGHT);
+    }
+
+    @Override
+    protected int getBaseSpeed() {
+        return CommonConfig.crafterBaseSpeed();
     }
 
     @Override
@@ -113,16 +120,20 @@ public class BetterAutoCrafterBlockEntity extends AutoMachineBlockEntity {
     }
 
     @Override
-    protected boolean canOperate() {
+    protected @Nullable MachineProblem templateProblem() {
         updateRecipeCache();
-        return cachedRecipe != null;
+        if (cachedRecipe != null) {
+            return null;
+        }
+        MachineProblem empty = super.templateProblem();
+        return empty != null ? empty : MachineProblem.NO_RECIPE;
     }
 
     /** The recipe's amount of every grid item, whatever their count in the grid: the grid is only the recipe's layout. */
     @Override
     protected boolean operate(ServerLevel level, ItemTransfer transfer) {
         if (cachedRecipe == null) {
-            return false;
+            return transfer.fail(MachineProblem.NO_RECIPE);
         }
         Recipe<CraftingInput> recipe = cachedRecipe;
         List<ItemStack> grid = getTemplateStacks();

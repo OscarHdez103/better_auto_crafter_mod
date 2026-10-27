@@ -25,6 +25,8 @@ public abstract class SideTab {
     protected static final int COLLAPSED_SIZE = 24;
     protected static final int HEADER_HEIGHT = 24;
     protected static final int ICON_OFFSET = 4;
+    /** Size of the header icon, and of icons in general (like an item's). */
+    protected static final int ICON_SIZE = 16;
     protected static final int PADDING = 8;
     private static final long ANIMATION_MS = 160;
     private static final int TITLE_COLOR = 0xFFFFFFFF;
@@ -148,21 +150,17 @@ public abstract class SideTab {
         return open && progress >= 1.0F;
     }
 
+    public boolean isFullyClosed() {
+        return !open && progress <= 0.0F;
+    }
+
     public boolean isMouseOver(double mouseX, double mouseY) {
         return mouseX >= x && mouseX < x + currentWidth() && mouseY >= y && mouseY < y + currentHeight();
     }
 
-    /** Left edge of the content area (below the header). */
-    protected int contentLeft() {
-        return x + PADDING;
-    }
-
+    /** Top edge of the content area (below the header). */
     protected int contentTop() {
         return y + HEADER_HEIGHT;
-    }
-
-    protected int contentWidth() {
-        return expandedWidth - PADDING * 2;
     }
 
     // ---------------------------------------------------------------------------------------------------------------

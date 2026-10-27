@@ -2,6 +2,7 @@ package laseta.bac.upgrade;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.ToIntFunction;
 
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
@@ -10,17 +11,21 @@ import net.neoforged.neoforge.items.ItemStackHandler;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * The upgrade slots: one per {@link UpgradeSlotType}, each accepting only its kind of upgrade, up to its stack limit.
+ * The upgrade slots: one per {@link UpgradeSlotType}, each accepting only its kind of upgrade, up to the limit the
+ * machine sets for it.
  * Not exposed as a capability (like the rest of the block), so only players can change it.
  */
 public class UpgradeInventory extends ItemStackHandler {
     private final Runnable onChanged;
+    private final ToIntFunction<UpgradeSlotType> limits;
     /** Items loaded into slots that no longer exist; the owner drops them in the world. */
     private final List<ItemStack> orphans = new ArrayList<>();
 
-    public UpgradeInventory(Runnable onChanged) {
+    /** @param limits how many upgrades each slot holds */
+    public UpgradeInventory(Runnable onChanged, ToIntFunction<UpgradeSlotType> limits) {
         super(UpgradeSlotType.COUNT);
         this.onChanged = onChanged;
+        this.limits = limits;
     }
 
     public ItemStack get(UpgradeSlotType type) {
@@ -34,7 +39,7 @@ public class UpgradeInventory extends ItemStackHandler {
 
     @Override
     public int getSlotLimit(int slot) {
-        return slot >= 0 && slot < UpgradeSlotType.COUNT ? UpgradeSlotType.byIndex(slot).getMaxStackSize() : 0;
+        return slot >= 0 && slot < UpgradeSlotType.COUNT ? limits.applyAsInt(UpgradeSlotType.byIndex(slot)) : 0;
     }
 
     @Override

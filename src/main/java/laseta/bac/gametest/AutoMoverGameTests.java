@@ -7,6 +7,7 @@ import laseta.bac.BetterAutoCrafter;
 import laseta.bac.CommonConfig;
 import laseta.bac.block.entity.BetterAutoMoverBlockEntity;
 import laseta.bac.machine.AutoMachineBlock;
+import laseta.bac.machine.MachineProblem;
 import laseta.bac.machine.AutoMachineMenu;
 import laseta.bac.machine.RedstoneMode;
 import laseta.bac.machine.TransferPriority;
@@ -113,6 +114,7 @@ public final class AutoMoverGameTests {
         assertCount(helper, input, Items.DIRT, 3, "one dirt short: dirt stays");
         assertCount(helper, input, Items.COBBLESTONE, 4, "cobblestone left");
 
+        mover.getStatus().endCooldown();
         helper.assertTrue(!mover.attemptOperation(), "no slot has all its items any more");
         assertCount(helper, input, Items.COBBLESTONE, 4, "nothing more taken");
         helper.assertBlockProperty(MOVER, AutoMachineBlock.FAILED, true);
@@ -232,8 +234,11 @@ public final class AutoMoverGameTests {
         assertCount(helper, output, Items.DIRT, 4, "dirt moved");
 
         output.setItem(1, new ItemStack(Items.DIRT, 16));
+        mover.getStatus().endCooldown();
         helper.assertTrue(!mover.attemptOperation(), "everything stocked: nothing to move");
         assertCount(helper, input, Items.DIRT, 60, "no more dirt taken");
+        helper.assertTrue(mover.getStatus().getLastProblem() == MachineProblem.STOCKED, "says it is stocked");
+        helper.assertBlockProperty(MOVER, AutoMachineBlock.FAILED, false);
         helper.succeed();
     }
 
@@ -281,12 +286,12 @@ public final class AutoMoverGameTests {
 
     @GameTest(template = TEMPLATE)
     public static void blockHasCraftingRecipe(GameTestHelper helper) {
-        ItemStack iron = new ItemStack(Items.IRON_INGOT);
+        ItemStack material = new ItemStack(ModItems.BETTER_MATERIAL.get());
         ItemStack hopper = new ItemStack(Items.HOPPER);
         CraftingInput input = CraftingInput.of(3, 3, List.of(
-                iron, new ItemStack(Items.REDSTONE_TORCH), iron,
+                material, new ItemStack(Items.ENDER_PEARL), material,
                 hopper, new ItemStack(Items.DROPPER), hopper,
-                iron, new ItemStack(Items.COMPARATOR), iron));
+                material, new ItemStack(Items.REDSTONE), material));
         ItemStack result = helper.getLevel().getRecipeManager()
                 .getRecipeFor(RecipeType.CRAFTING, input, helper.getLevel())
                 .map(holder -> holder.value().assemble(input, helper.getLevel().registryAccess()))

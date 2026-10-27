@@ -6,7 +6,9 @@ import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.IntConsumer;
 import java.util.function.Predicate;
+import java.util.function.ToIntFunction;
 
 import com.mojang.logging.LogUtils;
 
@@ -38,6 +40,10 @@ import org.slf4j.Logger;
  * <p>The inventories come as {@link InventoryFace}s, so the operation doesn't care where they are: the faces around a
  * {@link MachineAnchor} (the machine itself, or a Translocator when a translocation upgrade moves them there, possibly
  * to another dimension; see {@link #facesAround}), or the blocks linked by a Multi Translocation Upgrade.</p>
+ *
+ * <p>An operation can also {@link #pull} other things from inventories of their own, e.g. fuel or the bottles a brew
+ * starts from. They are planned, taken and put back together with the template's items, and what is left of them
+ * (an empty bucket) is pushed into inventories of their own too.</p>
  *
  * <p>With a stock limit (stocking upgrades), an output inventory that already holds that many of a product doesn't
  * receive it; if every output inventory is stocked, nothing happens. With a linked storage (Storage Link Upgrade) the
@@ -83,7 +89,34 @@ public final class ItemTransfer {
         Output apply(List<List<ItemStack>> pulled);
     }
 
+    /**
+     * Something an operation pulls besides its template's items, from inventories of its own. Items are always matched
+     * with their data components, whatever the NBT matching setting: it only applies to the template.
+     *
+     * @param sources   where it is pulled from, in order
+     * @param accepts   which items may be taken
+     * @param value     what one item counts for (e.g. a fuel's burn time); items worth 0 or less are never taken
+     * @param needed    how much value to take, at least (the last item may go over); 0 or less pulls nothing
+     * @param missing   why the operation can't happen when the sources don't hold enough
+     * @param leftovers where what is left of the taken items goes (their crafting remainders, e.g. the bucket of a lava
+     *                  bucket); without room there, the operation doesn't happen ({@link MachineProblem#LEFTOVER_FULL})
+     * @param onTaken   called with the value taken, once the operation is certain to happen
+     */
+    public record Pull(List<IItemHandler> sources, Predicate<ItemStack> accepts, ToIntFunction<ItemStack> value, int needed,
+                       MachineProblem missing, List<IItemHandler> leftovers, IntConsumer onTaken) {
+        /** {@code count} items exactly like {@code stack} (same data components). */
+        public static Pull exactly(List<IItemHandler> sources, ItemStack stack, int count, MachineProblem missing) {
+            return new Pull(sources, candidate -> ItemStack.isSameItemSameComponents(candidate, stack), candidate -> 1, count,
+                    missing, List.of(), taken -> {
+            });
+        }
+    }
+
     private record Take(IItemHandler handler, int slot, ItemStack expected) {
+    }
+
+    /** A pull's planned takes, the value they add up to and what is left of them once used. */
+    private record PlannedPull(Pull pull, List<Take> takes, int value, List<ItemStack> leftovers) {
     }
 
     private record Extracted(IItemHandler handler, int slot, ItemStack stack) {
@@ -101,6 +134,10 @@ public final class ItemTransfer {
     private final int stockLimit;
     @Nullable
     private final StockReading.Counter linkedStock;
+    private final List<Pull> pulls = new ArrayList<>();
+    /** Why the operation didn't happen, see {@link #fail}. */
+    @Nullable
+    private MachineProblem problem;
 
     /**
      * @param level       the machine's level (leftovers are dropped there as a last resort)
@@ -119,6 +156,15 @@ public final class ItemTransfer {
         this.linkedStock = linkedStock;
         this.inputs = handlersInOrder(inputs, settings.getInputPriority(), settings.getInputCursor());
         this.outputs = handlersInOrder(outputs, settings.getOutputPriority(), settings.getOutputCursor());
+    }
+
+    /**
+     * Makes every operation of this transfer also pull {@code pull}, all or nothing with the rest. With {@link #runEach},
+     * each slot's operation pulls it again.
+     */
+    public ItemTransfer pull(Pull pull) {
+        pulls.add(pull);
+        return this;
     }
 
     /**
@@ -160,8 +206,11 @@ public final class ItemTransfer {
     }
 
     private boolean runOnce(List<ItemStack> template, Process process) {
-        if (inputs.isEmpty() || outputs.isEmpty()) {
-            return false;
+        if (inputs.isEmpty()) {
+            return fail(MachineProblem.NO_INPUTS);
+        }
+        if (outputs.isEmpty()) {
+            return fail(MachineProblem.NO_OUTPUTS);
         }
 
         // 1. Plan which stacks to take for every template slot.
@@ -175,36 +224,55 @@ public final class ItemTransfer {
             }
             List<Take> slotTakes = planTakes(wanted, reserved);
             if (slotTakes == null) {
-                return false;
+                return fail(MachineProblem.MISSING_ITEMS);
             }
             takes.addAll(slotTakes);
             pulled.add(slotTakes.stream().map(Take::expected).toList());
         }
         if (takes.isEmpty()) {
-            return false;
+            return fail(MachineProblem.EMPTY_TEMPLATE);
+        }
+        List<PlannedPull> plannedPulls = new ArrayList<>(pulls.size());
+        for (Pull pull : pulls) {
+            PlannedPull planned = planPull(pull, reserved);
+            if (planned == null) {
+                return fail(pull.missing());
+            }
+            plannedPulls.add(planned);
         }
 
         // 2. What comes out of these items.
         Output output = process.apply(pulled);
         if (output == null || output.products().isEmpty()) {
-            return false;
+            return fail(MachineProblem.CANNOT_PROCESS);
         }
 
         // 3. There must be room for everything that comes out (products only where they aren't stocked yet).
         List<Delivery> deliveries = new ArrayList<>();
         for (ItemStack product : output.products()) {
-            List<IItemHandler> targets = planDelivery(product, unstockedOutputs(product));
+            List<IItemHandler> unstocked = unstockedOutputs(product);
+            List<IItemHandler> targets = planDelivery(product, unstocked);
             if (targets == null) {
-                return false;
+                return fail(unstocked.isEmpty() ? MachineProblem.STOCKED : MachineProblem.OUTPUT_FULL);
             }
             deliveries.add(new Delivery(product, targets));
         }
         for (ItemStack byproduct : output.byproducts()) {
             List<IItemHandler> targets = planDelivery(byproduct, outputs);
             if (targets == null) {
-                return false;
+                return fail(MachineProblem.OUTPUT_FULL);
             }
             deliveries.add(new Delivery(byproduct, targets));
+        }
+        for (PlannedPull planned : plannedPulls) {
+            for (ItemStack leftover : planned.leftovers()) {
+                List<IItemHandler> targets = planDelivery(leftover, planned.pull().leftovers());
+                if (targets == null) {
+                    return fail(MachineProblem.LEFTOVER_FULL);
+                }
+                deliveries.add(new Delivery(leftover, targets));
+            }
+            takes.addAll(planned.takes());
         }
 
         // 4. Take the items for real.
@@ -217,16 +285,36 @@ public final class ItemTransfer {
             }
             if (got.getCount() != count || !ItemStack.isSameItemSameComponents(got, take.expected())) {
                 rollback(extracted);
-                return false;
+                return fail(MachineProblem.INPUTS_CHANGED);
             }
         }
 
         // 5. Deliver.
+        for (PlannedPull planned : plannedPulls) {
+            planned.pull().onTaken().accept(planned.value());
+        }
         output.beforeDelivery().run();
         for (Delivery delivery : deliveries) {
             deliver(delivery);
         }
         return true;
+    }
+
+    /**
+     * Records why the operation didn't happen and returns false, so a machine can {@code return transfer.fail(...)}.
+     * The first problem is kept: with {@link #runEach}, the first slot's.
+     */
+    public boolean fail(MachineProblem problem) {
+        if (this.problem == null) {
+            this.problem = problem;
+        }
+        return false;
+    }
+
+    /** Why the operation didn't happen; null if it did (or nothing said why). */
+    @Nullable
+    public MachineProblem getProblem() {
+        return problem;
     }
 
     /**
@@ -292,6 +380,58 @@ public final class ItemTransfer {
             }
         }
         return needed > 0 ? null : takes;
+    }
+
+    /**
+     * Finds items worth at least {@code pull.needed()} in its sources, taking earlier reservations into account.
+     *
+     * @return null if there aren't enough
+     */
+    @Nullable
+    private PlannedPull planPull(Pull pull, Map<IItemHandler, Map<Integer, Integer>> reserved) {
+        int missing = pull.needed();
+        int value = 0;
+        List<Take> takes = new ArrayList<>(1);
+        List<IItemHandler> sources = handlersInOrder(pull.sources());
+        for (IItemHandler handler : sources) {
+            Map<Integer, Integer> handlerReserved = reserved.computeIfAbsent(handler, h -> new HashMap<>());
+            for (int slot = 0; slot < handler.getSlots() && missing > 0; slot++) {
+                ItemStack inSlot = handler.getStackInSlot(slot);
+                if (inSlot.isEmpty() || !pull.accepts().test(inSlot)) {
+                    continue;
+                }
+                int each = pull.value().applyAsInt(inSlot);
+                if (each <= 0) {
+                    continue;
+                }
+                int alreadyReserved = handlerReserved.getOrDefault(slot, 0);
+                int wanted = (missing + each - 1) / each;
+                ItemStack simulated = handler.extractItem(slot, alreadyReserved + wanted, true);
+                int available = simulated.getCount() - alreadyReserved;
+                if (available <= 0 || !ItemStack.isSameItemSameComponents(simulated, inSlot)) {
+                    continue;
+                }
+                int amount = Math.min(available, wanted);
+                handlerReserved.put(slot, alreadyReserved + amount);
+                takes.add(new Take(handler, slot, simulated.copyWithCount(amount)));
+                value += amount * each;
+                missing -= amount * each;
+            }
+        }
+        if (missing > 0) {
+            return null;
+        }
+        List<List<ItemStack>> leftovers = new ArrayList<>(takes.size());
+        for (Take take : takes) {
+            ItemStack one = take.expected().copyWithCount(1);
+            if (one.hasCraftingRemainingItem()) {
+                ItemStack leftover = one.getCraftingRemainingItem();
+                if (!leftover.isEmpty()) {
+                    leftovers.add(List.of(leftover.copyWithCount(leftover.getCount() * take.expected().getCount())));
+                }
+            }
+        }
+        return new PlannedPull(pull, takes, value, merge(leftovers));
     }
 
     private static boolean matches(ItemStack wanted, ItemStack candidate, boolean exact) {
@@ -391,6 +531,12 @@ public final class ItemTransfer {
 
     // ---------------------------------------------------------------------------------------------------------------
 
+    /** Drops duplicates (the very same handler object twice), keeping the order. */
+    private static List<IItemHandler> handlersInOrder(List<IItemHandler> handlers) {
+        Map<IItemHandler, Boolean> seen = new IdentityHashMap<>();
+        return handlers.stream().filter(handler -> seen.put(handler, Boolean.TRUE) == null).toList();
+    }
+
     /**
      * Applies the priority, then drops duplicates (two faces exposing the very same handler object). Faces without a
      * machine side (linked blocks) are never preferred, so a face priority keeps them in link order.
@@ -411,10 +557,15 @@ public final class ItemTransfer {
      * Neighbours in unloaded chunks are skipped (never loaded), like hoppers and pipes do.
      */
     public static List<InventoryFace> facesAround(MachineAnchor anchor, SideConfiguration sides, Predicate<SideMode> filter) {
+        return facesAround(anchor, side -> filter.test(sides.getMode(side)));
+    }
+
+    /** Item handlers next to {@code anchor} on the faces {@code faces} accepts, in {@link RelativeSide} order. */
+    public static List<InventoryFace> facesAround(MachineAnchor anchor, Predicate<RelativeSide> faces) {
         ServerLevel level = anchor.level();
-        List<InventoryFace> faces = new ArrayList<>();
+        List<InventoryFace> found = new ArrayList<>();
         for (RelativeSide side : RelativeSide.values()) {
-            if (!filter.test(sides.getMode(side))) {
+            if (!faces.test(side)) {
                 continue;
             }
             Direction direction = side.toDirection(anchor.facing());
@@ -425,9 +576,9 @@ public final class ItemTransfer {
             // The context is the neighbour's side that touches us, exactly like a hopper or pipe would ask.
             IItemHandler handler = level.getCapability(Capabilities.ItemHandler.BLOCK, neighbourPos, direction.getOpposite());
             if (handler != null) {
-                faces.add(new InventoryFace(side, handler));
+                found.add(new InventoryFace(side, handler));
             }
         }
-        return faces;
+        return found;
     }
 }

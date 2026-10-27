@@ -8,8 +8,11 @@ import com.mojang.serialization.DataResult;
 import com.mojang.serialization.JsonOps;
 
 import laseta.bac.BetterAutoCrafter;
+import laseta.bac.CommonConfig;
 import laseta.bac.block.entity.BetterAutoCrafterBlockEntity;
 import laseta.bac.machine.AutoMachineBlock;
+import laseta.bac.machine.AutoMachineBlockEntity;
+import laseta.bac.machine.MachineProblem;
 import laseta.bac.machine.RedstoneMode;
 import laseta.bac.machine.TransferPriority;
 import laseta.bac.recipe.AutoCraftingRecipe;
@@ -17,9 +20,11 @@ import laseta.bac.registry.ModBlocks;
 import laseta.bac.registry.ModItems;
 import laseta.bac.sideconfig.RelativeSide;
 import laseta.bac.sideconfig.SideMode;
+import laseta.bac.upgrade.UpgradeSlotType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
@@ -56,6 +61,7 @@ public final class AutoCrafterGameTests {
     private static final BlockPos REDSTONE = CRAFTER.south();
     /** Ticks to wait after a redstone change before checking (the craft runs one tick after the rising edge). */
     private static final int SETTLE = 5;
+    private static final int COOLDOWN = CommonConfig.crafterBaseSpeed();
 
     private AutoCrafterGameTests() {
     }
@@ -95,11 +101,12 @@ public final class AutoCrafterGameTests {
         // Staying powered must not craft again.
         helper.runAfterDelay(SETTLE * 3, () -> assertCount(helper, output, Items.STICK, 4, "sticks while still powered"));
         helper.runAfterDelay(SETTLE * 3 + 1, () -> unpower(helper));
-        helper.runAfterDelay(SETTLE * 4, () -> {
+        helper.runAfterDelay(COOLDOWN + SETTLE, () -> {
+            helper.assertBlockProperty(CRAFTER, AutoMachineBlock.TRIGGERED, false);
             helper.assertBlockProperty(CRAFTER, AutoMachineBlock.POWERED, false);
             power(helper);
         });
-        helper.runAfterDelay(SETTLE * 5, () -> {
+        helper.runAfterDelay(COOLDOWN + SETTLE * 2, () -> {
             assertCount(helper, output, Items.STICK, 8, "sticks after second pulse");
             assertCount(helper, input, Items.OAK_PLANKS, 6, "planks after two crafts");
             helper.succeed();
@@ -263,8 +270,8 @@ public final class AutoCrafterGameTests {
 
         power(helper);
         helper.runAfterDelay(SETTLE, () -> unpower(helper));
-        helper.runAfterDelay(SETTLE * 2, () -> power(helper));
-        helper.runAfterDelay(SETTLE * 3, () -> {
+        helper.runAfterDelay(COOLDOWN + SETTLE, () -> power(helper));
+        helper.runAfterDelay(COOLDOWN + SETTLE * 2, () -> {
             assertCount(helper, front, Items.STICK, 4, "first craft goes to the first output face");
             assertCount(helper, bottom, Items.STICK, 4, "second craft goes to the next output face");
             helper.succeed();
@@ -288,8 +295,8 @@ public final class AutoCrafterGameTests {
 
         power(helper);
         helper.runAfterDelay(SETTLE, () -> unpower(helper));
-        helper.runAfterDelay(SETTLE * 2, () -> power(helper));
-        helper.runAfterDelay(SETTLE * 3, () -> {
+        helper.runAfterDelay(COOLDOWN + SETTLE, () -> power(helper));
+        helper.runAfterDelay(COOLDOWN + SETTLE * 2, () -> {
             assertCount(helper, topInput, Items.OAK_PLANKS, 6, "both crafts pull from the preferred top face");
             assertCount(helper, frontInput, Items.OAK_PLANKS, 10, "front input untouched");
             assertCount(helper, bottomOutput, Items.STICK, 8, "both crafts go to the preferred bottom face");
@@ -327,13 +334,13 @@ public final class AutoCrafterGameTests {
             beforePower.set(sticks(helper));
             power(helper);
         });
-        helper.runAfterDelay(14, () -> unpower(helper));
-        helper.runAfterDelay(16, () -> afterUnpower.set(sticks(helper)));
-        helper.runAfterDelay(30, () -> {
+        helper.runAfterDelay(4 + COOLDOWN * 2 + SETTLE, () -> unpower(helper));
+        helper.runAfterDelay(4 + COOLDOWN * 2 + SETTLE * 2, () -> afterUnpower.set(sticks(helper)));
+        helper.runAfterDelay(4 + COOLDOWN * 4, () -> {
             helper.assertTrue(beforePower.get() == 0, "constant mode must not craft while unpowered");
             int crafts = afterUnpower.get() / 4;
-            // 10 powered ticks with one attempt every 2 ticks.
-            helper.assertTrue(crafts >= 4 && crafts <= 6, "expected about 5 crafts while powered, got " + crafts);
+            // Powered for two cooldowns and a bit: a craft right away, then one after each cooldown.
+            helper.assertTrue(crafts == 3, "expected 3 crafts while powered, got " + crafts);
             helper.assertTrue(sticks(helper) == afterUnpower.get(), "constant mode must stop when unpowered");
             helper.succeed();
         });
@@ -343,12 +350,13 @@ public final class AutoCrafterGameTests {
     public static void invertedModeCraftsWhileUnpowered(GameTestHelper helper) {
         placeStickSetup(helper, RedstoneMode.INVERTED);
         AtomicInteger afterPower = new AtomicInteger();
-        helper.runAfterDelay(10, () -> {
-            helper.assertTrue(sticks(helper) >= 16, "inverted mode should craft while unpowered, got " + sticks(helper));
+        helper.runAfterDelay(SETTLE, () -> {
+            helper.assertTrue(sticks(helper) == 4, "inverted mode should craft while unpowered, got " + sticks(helper));
             power(helper);
         });
-        helper.runAfterDelay(12, () -> afterPower.set(sticks(helper)));
-        helper.runAfterDelay(25, () -> {
+        helper.runAfterDelay(SETTLE + 2, () -> afterPower.set(sticks(helper)));
+        // Past the cooldown: it would have crafted again by now if it still ran.
+        helper.runAfterDelay(COOLDOWN * 2, () -> {
             helper.assertTrue(sticks(helper) == afterPower.get(), "inverted mode must stop while powered");
             helper.succeed();
         });
@@ -366,7 +374,8 @@ public final class AutoCrafterGameTests {
         power(helper);
         helper.runAfterDelay(6, () -> {
             helper.assertBlockProperty(CRAFTER, AutoMachineBlock.FAILED, true);
-            helper.assertBlockProperty(CRAFTER, AutoMachineBlock.POWERED, true);
+            helper.assertBlockProperty(CRAFTER, AutoMachineBlock.TRIGGERED, true);
+            helper.assertBlockProperty(CRAFTER, AutoMachineBlock.POWERED, false);
         });
         helper.runAfterDelay(14, () -> {
             helper.assertBlockProperty(CRAFTER, AutoMachineBlock.FAILED, false);
@@ -433,28 +442,166 @@ public final class AutoCrafterGameTests {
     }
 
     // ---------------------------------------------------------------------------------------------------------------
+    // Cooldown and status
+    // ---------------------------------------------------------------------------------------------------------------
+
+    @GameTest(template = TEMPLATE)
+    public static void pulseDuringCooldownIsIgnored(GameTestHelper helper) {
+        placeStickSetup(helper, RedstoneMode.ON_POWERED);
+        power(helper);
+        helper.runAfterDelay(2, () -> unpower(helper));
+        helper.runAfterDelay(SETTLE, () -> power(helper));
+        helper.runAfterDelay(SETTLE + 2, () -> unpower(helper));
+        helper.runAfterDelay(SETTLE * 2, () -> {
+            helper.assertTrue(sticks(helper) == 4, "a pulse during the cooldown doesn't craft, got " + sticks(helper));
+            helper.assertTrue(helper.<AutoMachineBlockEntity>getBlockEntity(CRAFTER).isCoolingDown(), "still cooling down");
+        });
+        helper.runAfterDelay(COOLDOWN + SETTLE, () -> power(helper));
+        helper.runAfterDelay(COOLDOWN + SETTLE * 2, () -> {
+            helper.assertTrue(sticks(helper) == 8, "a pulse after the cooldown crafts, got " + sticks(helper));
+            helper.succeed();
+        });
+    }
+
+    @GameTest(template = TEMPLATE)
+    public static void showsRunningOnlyDuringTheCooldown(GameTestHelper helper) {
+        placeStickSetup(helper, RedstoneMode.ON_POWERED);
+        power(helper);
+        helper.runAfterDelay(2, () -> unpower(helper));
+        helper.runAfterDelay(SETTLE, () -> {
+            helper.assertBlockProperty(CRAFTER, AutoMachineBlock.TRIGGERED, false);
+            helper.assertBlockProperty(CRAFTER, AutoMachineBlock.POWERED, true);
+        });
+        helper.runAfterDelay(COOLDOWN + SETTLE, () -> {
+            helper.assertBlockProperty(CRAFTER, AutoMachineBlock.POWERED, false);
+            helper.succeed();
+        });
+    }
+
+    @GameTest(template = TEMPLATE)
+    public static void togglingTheSignalDoesNotSkipTheCooldown(GameTestHelper helper) {
+        placeStickSetup(helper, RedstoneMode.CONSTANT);
+        power(helper);
+        helper.runAfterDelay(SETTLE, () -> unpower(helper));
+        helper.runAfterDelay(SETTLE + 2, () -> power(helper));
+        helper.runAfterDelay(COOLDOWN - 2, () ->
+                helper.assertTrue(sticks(helper) == 4, "no craft before the cooldown ends, got " + sticks(helper)));
+        helper.runAfterDelay(COOLDOWN + SETTLE, () -> {
+            helper.assertTrue(sticks(helper) == 8, "crafts again once it ends, got " + sticks(helper));
+            helper.succeed();
+        });
+    }
+
+    @GameTest(template = TEMPLATE)
+    public static void cooldownIsSavedWithTheBlock(GameTestHelper helper) {
+        BetterAutoCrafterBlockEntity crafter = placeStickSetup(helper, RedstoneMode.ON_POWERED);
+        helper.assertTrue(crafter.attemptOperation(), "crafts");
+        CompoundTag saved = crafter.saveWithoutMetadata(helper.getLevel().registryAccess());
+        crafter.getStatus().endCooldown();
+        helper.assertTrue(!crafter.isCoolingDown(), "cooldown ended");
+        crafter.loadWithComponents(saved, helper.getLevel().registryAccess());
+        helper.assertTrue(crafter.isCoolingDown(), "loading brings the cooldown back");
+        helper.assertTrue(!crafter.attemptOperation(), "and it still stops the machine");
+        helper.succeed();
+    }
+
+    @GameTest(template = TEMPLATE)
+    public static void statusSaysWhyItFails(GameTestHelper helper) {
+        BetterAutoCrafterBlockEntity crafter = placeCrafter(helper);
+        helper.assertTrue(crafter.findProblem() == MachineProblem.EMPTY_TEMPLATE, "empty grid");
+        setGrid(crafter, new ItemStack(Items.DIRT), ItemStack.EMPTY, ItemStack.EMPTY, ItemStack.EMPTY, ItemStack.EMPTY,
+                ItemStack.EMPTY, ItemStack.EMPTY, ItemStack.EMPTY, new ItemStack(Items.STICK));
+        helper.assertTrue(crafter.findProblem() == MachineProblem.NO_RECIPE, "not a recipe");
+
+        crafter = placeStickCrafter(helper);
+        helper.assertTrue(crafter.findProblem() == null, "a valid recipe can run");
+        placeChest(helper, TOP, new ItemStack(Items.OAK_PLANKS, 1));
+        placeChest(helper, BOTTOM);
+        configure(crafter, RelativeSide.TOP, SideMode.INPUT);
+        helper.assertTrue(!crafter.attemptOperation(), "no output face");
+        helper.assertTrue(crafter.getStatus().getLastProblem() == MachineProblem.NO_OUTPUTS, "says there is no output");
+        configure(crafter, RelativeSide.BOTTOM, SideMode.OUTPUT);
+        helper.assertTrue(!crafter.attemptOperation(), "one plank short");
+        helper.assertTrue(crafter.getStatus().getLastProblem() == MachineProblem.MISSING_ITEMS, "says items are missing");
+        helper.assertTrue(!crafter.isCoolingDown(), "failed attempts don't cool down");
+        helper.succeed();
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // Speed and co-processor upgrades
+    // ---------------------------------------------------------------------------------------------------------------
+
+    @GameTest(template = TEMPLATE)
+    public static void speedUpgradesShortenTheCooldown(GameTestHelper helper) {
+        BetterAutoCrafterBlockEntity crafter = placeStickSetup(helper, RedstoneMode.ON_POWERED);
+        int slot = UpgradeSlotType.SPEED.ordinal();
+        crafter.getUpgrades().setStackInSlot(slot, new ItemStack(ModItems.SPEED_UPGRADE.get(), 3));
+        helper.assertTrue(crafter.attemptOperation(), "crafts");
+        helper.assertTrue(crafter.getStatus().getCooldownTotal() == COOLDOWN - 6, "3 upgrades: 6 ticks shorter, got "
+                + crafter.getStatus().getCooldownTotal());
+
+        // Only as many as take it down to 2 ticks fit.
+        int useful = (COOLDOWN - 2 + 1) / 2;
+        helper.assertTrue(crafter.getUpgrades().getSlotLimit(slot) == useful, "slot holds " + useful);
+        crafter.getUpgrades().setStackInSlot(slot, new ItemStack(ModItems.SPEED_UPGRADE.get(), useful));
+        helper.assertTrue(crafter.getUpgrades().insertItem(slot, ModItems.SPEED_UPGRADE.get().getDefaultInstance(), true).getCount() == 1,
+                "a full slot refuses more");
+        crafter.getStatus().endCooldown();
+        helper.assertTrue(crafter.attemptOperation(), "crafts again");
+        helper.assertTrue(crafter.getStatus().getCooldownTotal() == 2, "never below 2 ticks, got "
+                + crafter.getStatus().getCooldownTotal());
+        helper.succeed();
+    }
+
+    @GameTest(template = TEMPLATE)
+    public static void coProcessorsRepeatTheOperation(GameTestHelper helper) {
+        BetterAutoCrafterBlockEntity crafter = placeStickSetup(helper, RedstoneMode.ON_POWERED);
+        crafter.getUpgrades().setStackInSlot(UpgradeSlotType.CO_PROCESSOR.ordinal(), new ItemStack(ModItems.CO_PROCESSOR_UPGRADE.get(), 2));
+        helper.assertTrue(crafter.attemptOperation(), "crafts");
+        helper.assertTrue(sticks(helper) == 12, "1 + 2 co-processors = 3 crafts, got " + sticks(helper));
+        helper.succeed();
+    }
+
+    @GameTest(template = TEMPLATE)
+    public static void coProcessorsStopWhenItemsRunOut(GameTestHelper helper) {
+        BetterAutoCrafterBlockEntity crafter = placeStickCrafter(helper);
+        Container input = placeChest(helper, TOP, new ItemStack(Items.OAK_PLANKS, 5));
+        placeChest(helper, BOTTOM);
+        configure(crafter, RelativeSide.TOP, SideMode.INPUT);
+        configure(crafter, RelativeSide.BOTTOM, SideMode.OUTPUT);
+        crafter.getUpgrades().setStackInSlot(UpgradeSlotType.CO_PROCESSOR.ordinal(), new ItemStack(ModItems.CO_PROCESSOR_UPGRADE.get(), 64));
+        helper.assertTrue(crafter.attemptOperation(), "some crafts happened: a success");
+        helper.assertTrue(sticks(helper) == 8, "only 2 crafts' worth of planks, got " + sticks(helper));
+        assertCount(helper, input, Items.OAK_PLANKS, 1, "the odd plank is left");
+        helper.assertTrue(crafter.getStatus().getLastProblem() == null, "no problem shown");
+        helper.assertTrue(crafter.isCoolingDown(), "cools down like any success");
+        helper.succeed();
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------
     // Auto crafting recipes
     // ---------------------------------------------------------------------------------------------------------------
 
     @GameTest(template = TEMPLATE)
     public static void craftsAutoCraftingRecipeWithItsCounts(GameTestHelper helper) {
         BetterAutoCrafterBlockEntity crafter = placeBetterMaterialCrafter(helper);
-        Container input = placeChest(helper, TOP, new ItemStack(Items.COPPER_INGOT, 17), new ItemStack(Items.REDSTONE, 9),
-                new ItemStack(Items.IRON_INGOT, 11));
+        Container input = placeChest(helper, TOP, new ItemStack(Items.COPPER_INGOT, 25), new ItemStack(Items.IRON_INGOT, 9),
+                new ItemStack(Items.REDSTONE_TORCH, 6));
         Container output = placeChest(helper, BOTTOM);
         configure(crafter, RelativeSide.TOP, SideMode.INPUT);
         configure(crafter, RelativeSide.BOTTOM, SideMode.OUTPUT);
 
         helper.assertTrue(crafter.getCraftingResult().is(ModItems.BETTER_MATERIAL.get()), "the grid makes a Better Material");
-        helper.assertTrue(crafter.getAmount(0) == 4 && crafter.getAmount(1) == 2 && crafter.getAmount(4) == 10,
-                "4 copper per corner, 2 redstone per side, 10 iron in the middle");
+        helper.assertTrue(crafter.getAmount(0) == 6 && crafter.getAmount(1) == 2 && crafter.getAmount(4) == 5,
+                "6 copper per corner, 2 iron per side, 5 redstone torches in the middle");
         helper.assertTrue(crafter.attemptOperation(), "crafts");
         assertCount(helper, output, ModItems.BETTER_MATERIAL.get(), 3, "three made");
-        assertCount(helper, input, Items.COPPER_INGOT, 1, "16 copper taken");
-        assertCount(helper, input, Items.REDSTONE, 1, "8 redstone taken");
-        assertCount(helper, input, Items.IRON_INGOT, 1, "10 iron taken");
+        assertCount(helper, input, Items.COPPER_INGOT, 1, "24 copper taken");
+        assertCount(helper, input, Items.IRON_INGOT, 1, "8 iron taken");
+        assertCount(helper, input, Items.REDSTONE_TORCH, 1, "5 redstone torches taken");
         helper.assertTrue(crafter.getTemplate().getStackInSlot(0).getCount() == 1, "the grid is never consumed");
 
+        crafter.getStatus().endCooldown();
         helper.assertTrue(!crafter.attemptOperation(), "not enough left for a second one");
         assertCount(helper, input, Items.COPPER_INGOT, 1, "nothing taken by the failed craft");
         helper.succeed();
@@ -464,16 +611,16 @@ public final class AutoCrafterGameTests {
     public static void autoCraftingRecipeNeedsItsWholeCount(GameTestHelper helper) {
         BetterAutoCrafterBlockEntity crafter = placeBetterMaterialCrafter(helper);
         // One copper short: every slot has at least one item, but not the recipe's count.
-        Container input = placeChest(helper, TOP, new ItemStack(Items.COPPER_INGOT, 15), new ItemStack(Items.REDSTONE, 8),
-                new ItemStack(Items.IRON_INGOT, 10));
+        Container input = placeChest(helper, TOP, new ItemStack(Items.COPPER_INGOT, 23), new ItemStack(Items.IRON_INGOT, 8),
+                new ItemStack(Items.REDSTONE_TORCH, 5));
         Container output = placeChest(helper, BOTTOM);
         configure(crafter, RelativeSide.TOP, SideMode.INPUT);
         configure(crafter, RelativeSide.BOTTOM, SideMode.OUTPUT);
 
         helper.assertTrue(!crafter.attemptOperation(), "doesn't craft");
         helper.assertTrue(output.isEmpty(), "nothing made");
-        assertCount(helper, input, Items.COPPER_INGOT, 15, "copper stays");
-        assertCount(helper, input, Items.REDSTONE, 8, "redstone stays");
+        assertCount(helper, input, Items.COPPER_INGOT, 23, "copper stays");
+        assertCount(helper, input, Items.REDSTONE_TORCH, 5, "redstone torches stay");
         helper.succeed();
     }
 
@@ -562,8 +709,8 @@ public final class AutoCrafterGameTests {
     private static BetterAutoCrafterBlockEntity placeBetterMaterialCrafter(GameTestHelper helper) {
         BetterAutoCrafterBlockEntity crafter = placeCrafter(helper);
         ItemStack copper = new ItemStack(Items.COPPER_INGOT);
-        ItemStack redstone = new ItemStack(Items.REDSTONE);
-        setGrid(crafter, copper, redstone, copper, redstone, new ItemStack(Items.IRON_INGOT), redstone, copper, redstone, copper);
+        ItemStack iron = new ItemStack(Items.IRON_INGOT);
+        setGrid(crafter, copper, iron, copper, iron, new ItemStack(Items.REDSTONE_TORCH), iron, copper, iron, copper);
         return crafter;
     }
 

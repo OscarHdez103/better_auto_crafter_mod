@@ -6,8 +6,13 @@ import java.util.List;
 
 import laseta.bac.BetterAutoCrafter;
 import laseta.bac.compat.StorageLinkIntegrations;
+import laseta.bac.item.CoProcessorUpgradeItem;
 import laseta.bac.item.CraftingComponentItem;
+import laseta.bac.item.FuelFilterUpgradeItem;
+import laseta.bac.item.InfiniteWaterUpgradeItem;
 import laseta.bac.item.MultiTranslocationUpgradeItem;
+import laseta.bac.item.PotionStarterUpgradeItem;
+import laseta.bac.item.SpeedUpgradeItem;
 import laseta.bac.item.StockingUpgradeItem;
 import laseta.bac.item.StorageLinkUpgradeItem;
 import laseta.bac.item.TranslocationUpgradeItem;
@@ -25,6 +30,8 @@ public final class ModItems {
 
     public static final DeferredItem<BlockItem> BETTER_AUTO_CRAFTER = ITEMS.registerSimpleBlockItem(ModBlocks.BETTER_AUTO_CRAFTER);
     public static final DeferredItem<BlockItem> BETTER_AUTO_MOVER = ITEMS.registerSimpleBlockItem(ModBlocks.BETTER_AUTO_MOVER);
+    public static final DeferredItem<BlockItem> BETTER_AUTO_SMELTER = ITEMS.registerSimpleBlockItem(ModBlocks.BETTER_AUTO_SMELTER);
+    public static final DeferredItem<BlockItem> BETTER_AUTO_BREWER = ITEMS.registerSimpleBlockItem(ModBlocks.BETTER_AUTO_BREWER);
     public static final DeferredItem<BlockItem> TRANSLOCATOR = ITEMS.registerSimpleBlockItem(ModBlocks.TRANSLOCATOR);
 
     /** Only made by the Better Auto Crafter (an auto crafting recipe); goes into the recipes of the mod's machines. */
@@ -40,7 +47,7 @@ public final class ModItems {
     public static final DeferredItem<TranslocationUpgradeItem> DIMENSIONAL_TRANSLOCATION_UPGRADE_PUSH =
             registerTranslocationUpgrade("dimensional_translocation_upgrade_push", TranslocationMode.PUSH, true);
 
-    /** Go into the same slots as the upgrades above, but link up to 8 blocks directly instead of a Translocator. */
+    /** Go into the same slots as the upgrades above, but link several blocks directly (up to the config's limit) instead of a Translocator. */
     public static final DeferredItem<MultiTranslocationUpgradeItem> MULTI_TRANSLOCATION_UPGRADE_PULL =
             registerMultiTranslocationUpgrade("multi_translocation_upgrade_pull", TranslocationMode.PULL, false);
     public static final DeferredItem<MultiTranslocationUpgradeItem> MULTI_TRANSLOCATION_UPGRADE_PUSH =
@@ -62,6 +69,20 @@ public final class ModItems {
     public static final DeferredItem<StorageLinkUpgradeItem> STORAGE_LINK_UPGRADE = ITEMS.registerItem("storage_link_upgrade",
             properties -> new StorageLinkUpgradeItem(new InventoryStockReader(), 0x40D0B0, properties),
             new Item.Properties().rarity(Rarity.UNCOMMON));
+    /** Make every operation shorter, and repeat it several times per run. */
+    public static final DeferredItem<SpeedUpgradeItem> SPEED_UPGRADE = ITEMS.registerItem("speed_upgrade",
+            SpeedUpgradeItem::new, new Item.Properties().rarity(Rarity.UNCOMMON));
+    public static final DeferredItem<CoProcessorUpgradeItem> CO_PROCESSOR_UPGRADE = ITEMS.registerItem("co_processor_upgrade",
+            CoProcessorUpgradeItem::new, new Item.Properties().rarity(Rarity.RARE));
+
+    /** Upgrades only some machines take, in their own tab: the brewer's starter slot and the smelter's fuel filter slot. */
+    public static final DeferredItem<InfiniteWaterUpgradeItem> INFINITE_WATER_UPGRADE = ITEMS.registerItem("infinite_water_upgrade",
+            InfiniteWaterUpgradeItem::new, new Item.Properties().rarity(Rarity.UNCOMMON));
+    public static final DeferredItem<PotionStarterUpgradeItem> POTION_STARTER_UPGRADE = ITEMS.registerItem("potion_starter_upgrade",
+            PotionStarterUpgradeItem::new, new Item.Properties().rarity(Rarity.UNCOMMON));
+    public static final DeferredItem<FuelFilterUpgradeItem> FUEL_FILTER_UPGRADE = ITEMS.registerItem("fuel_filter_upgrade",
+            FuelFilterUpgradeItem::new, new Item.Properties());
+
     /** The Storage Link Upgrades for the storage mods that are installed (see {@link StorageLinkIntegrations}). */
     public static final List<DeferredItem<StorageLinkUpgradeItem>> MOD_STORAGE_LINK_UPGRADES = registerModStorageLinkUpgrades();
 
