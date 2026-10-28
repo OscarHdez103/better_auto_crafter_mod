@@ -13,6 +13,7 @@ import laseta.bac.block.entity.BetterAutoCrafterBlockEntity;
 import laseta.bac.machine.AutoMachineBlock;
 import laseta.bac.machine.AutoMachineBlockEntity;
 import laseta.bac.machine.MachineProblem;
+import laseta.bac.machine.RecipeChoices;
 import laseta.bac.machine.RedstoneMode;
 import laseta.bac.machine.TransferPriority;
 import laseta.bac.recipe.AutoCraftingRecipe;
@@ -528,7 +529,7 @@ public final class AutoCrafterGameTests {
     }
 
     // ---------------------------------------------------------------------------------------------------------------
-    // Speed and co-processor upgrades
+    // Speed and coprocessing upgrades
     // ---------------------------------------------------------------------------------------------------------------
 
     @GameTest(template = TEMPLATE)
@@ -554,22 +555,22 @@ public final class AutoCrafterGameTests {
     }
 
     @GameTest(template = TEMPLATE)
-    public static void coProcessorsRepeatTheOperation(GameTestHelper helper) {
+    public static void coprocessingRepeatsTheOperation(GameTestHelper helper) {
         BetterAutoCrafterBlockEntity crafter = placeStickSetup(helper, RedstoneMode.ON_POWERED);
-        crafter.getUpgrades().setStackInSlot(UpgradeSlotType.CO_PROCESSOR.ordinal(), new ItemStack(ModItems.CO_PROCESSOR_UPGRADE.get(), 2));
+        crafter.getUpgrades().setStackInSlot(UpgradeSlotType.COPROCESSING.ordinal(), new ItemStack(ModItems.COPROCESSING_UPGRADE.get(), 2));
         helper.assertTrue(crafter.attemptOperation(), "crafts");
-        helper.assertTrue(sticks(helper) == 12, "1 + 2 co-processors = 3 crafts, got " + sticks(helper));
+        helper.assertTrue(sticks(helper) == 12, "1 + 2 coprocessing upgrades = 3 crafts, got " + sticks(helper));
         helper.succeed();
     }
 
     @GameTest(template = TEMPLATE)
-    public static void coProcessorsStopWhenItemsRunOut(GameTestHelper helper) {
+    public static void coprocessingStopsWhenItemsRunOut(GameTestHelper helper) {
         BetterAutoCrafterBlockEntity crafter = placeStickCrafter(helper);
         Container input = placeChest(helper, TOP, new ItemStack(Items.OAK_PLANKS, 5));
         placeChest(helper, BOTTOM);
         configure(crafter, RelativeSide.TOP, SideMode.INPUT);
         configure(crafter, RelativeSide.BOTTOM, SideMode.OUTPUT);
-        crafter.getUpgrades().setStackInSlot(UpgradeSlotType.CO_PROCESSOR.ordinal(), new ItemStack(ModItems.CO_PROCESSOR_UPGRADE.get(), 64));
+        crafter.getUpgrades().setStackInSlot(UpgradeSlotType.COPROCESSING.ordinal(), new ItemStack(ModItems.COPROCESSING_UPGRADE.get(), 64));
         helper.assertTrue(crafter.attemptOperation(), "some crafts happened: a success");
         helper.assertTrue(sticks(helper) == 8, "only 2 crafts' worth of planks, got " + sticks(helper));
         assertCount(helper, input, Items.OAK_PLANKS, 1, "the odd plank is left");
@@ -599,7 +600,7 @@ public final class AutoCrafterGameTests {
         assertCount(helper, input, Items.COPPER_INGOT, 1, "24 copper taken");
         assertCount(helper, input, Items.IRON_INGOT, 1, "8 iron taken");
         assertCount(helper, input, Items.REDSTONE_TORCH, 1, "5 redstone torches taken");
-        helper.assertTrue(crafter.getTemplate().getStackInSlot(0).getCount() == 1, "the grid is never consumed");
+        helper.assertTrue(crafter.getTemplate().getStackInSlot(0).getCount() == 6, "the grid is never consumed");
 
         crafter.getStatus().endCooldown();
         helper.assertTrue(!crafter.attemptOperation(), "not enough left for a second one");
@@ -625,12 +626,45 @@ public final class AutoCrafterGameTests {
     }
 
     @GameTest(template = TEMPLATE)
+    public static void autoCraftingRecipeNeedsItsCountsInTheGrid(GameTestHelper helper) {
+        BetterAutoCrafterBlockEntity crafter = placeCrafter(helper);
+        ItemStack copper = new ItemStack(Items.COPPER_INGOT);
+        ItemStack iron = new ItemStack(Items.IRON_INGOT, 2);
+        // One copper in a corner instead of 6: the layout is only whatever crafting recipe it is (none).
+        setGrid(crafter, copper, iron, new ItemStack(Items.COPPER_INGOT, 6), iron, new ItemStack(Items.REDSTONE_TORCH, 5), iron,
+                new ItemStack(Items.COPPER_INGOT, 6), iron, new ItemStack(Items.COPPER_INGOT, 6));
+        helper.assertTrue(crafter.getCraftingResult().isEmpty(), "no recipe, got " + crafter.getCraftingResult());
+        helper.assertTrue(crafter.getAmount(4) == 0, "no amounts shown");
+        helper.assertTrue(crafter.findProblem() == MachineProblem.NO_RECIPE, "says there is no recipe");
+        crafter.getTemplate().setStackInSlot(0, new ItemStack(Items.COPPER_INGOT, 64));
+        helper.assertTrue(crafter.getCraftingResult().is(ModItems.BETTER_MATERIAL.get()), "more than enough is enough");
+        helper.assertTrue(crafter.getAmount(0) == 6, "still takes 6, got " + crafter.getAmount(0));
+        helper.succeed();
+    }
+
+    @GameTest(template = TEMPLATE)
+    public static void crafterOffersItsRecipesToChooseFrom(GameTestHelper helper) {
+        BetterAutoCrafterBlockEntity crafter = placeStickCrafter(helper);
+        RecipeChoices choices = crafter.getRecipeChoices();
+        helper.assertTrue(choices.choices().size() == 1 && choices.chosen() == 0
+                && choices.choices().getFirst().result().is(Items.STICK), "one recipe, the one made, got " + choices);
+        helper.assertTrue(crafter.chooseRecipe(0), "the only recipe can be chosen");
+        helper.assertTrue(!crafter.chooseRecipe(1), "no second recipe");
+        helper.assertTrue(crafter.getCraftingResult().is(Items.STICK), "still sticks");
+        setGrid(crafter, ItemStack.EMPTY, ItemStack.EMPTY, ItemStack.EMPTY, ItemStack.EMPTY, ItemStack.EMPTY, ItemStack.EMPTY,
+                ItemStack.EMPTY, ItemStack.EMPTY, ItemStack.EMPTY);
+        helper.assertTrue(crafter.getRecipeChoices().choices().isEmpty() && crafter.getRecipeChoices().chosen() == -1,
+                "nothing to choose from an empty grid");
+        helper.succeed();
+    }
+
+    @GameTest(template = TEMPLATE)
     public static void autoCraftingRecipeMatchesMovedAndMirroredLayouts(GameTestHelper helper) {
         AutoCraftingRecipe recipe = parseAutoCraftingRecipe(helper, """
                 {"pattern": ["AB"], "key": {"A": {"item": "minecraft:stone", "count": 2}, "B": {"item": "minecraft:dirt", "count": 5}},
                  "result": {"id": "minecraft:diamond"}}""").getOrThrow();
-        ItemStack stone = new ItemStack(Items.STONE);
-        ItemStack dirt = new ItemStack(Items.DIRT);
+        ItemStack stone = new ItemStack(Items.STONE, 2);
+        ItemStack dirt = new ItemStack(Items.DIRT, 5);
         ItemStack none = ItemStack.EMPTY;
 
         int[] moved = recipe.amounts(CraftingInput.of(3, 3, List.of(none, none, none, none, stone, dirt, none, none, none)));
@@ -639,6 +673,8 @@ public final class AutoCrafterGameTests {
         helper.assertTrue(mirrored != null && mirrored[0] == 5 && mirrored[1] == 2, "matches mirrored, with the counts following the items");
         helper.assertTrue(recipe.amounts(CraftingInput.of(3, 3, List.of(stone, none, dirt, none, none, none, none, none, none))) == null,
                 "doesn't match with a gap");
+        helper.assertTrue(recipe.amounts(CraftingInput.of(3, 3, List.of(stone, new ItemStack(Items.DIRT, 4), none, none, none, none,
+                none, none, none))) == null, "doesn't match with too few dirt");
         helper.succeed();
     }
 
@@ -705,12 +741,12 @@ public final class AutoCrafterGameTests {
         return crafter;
     }
 
-    /** Crafter with the Better Material's auto crafting layout, one item per slot. */
+    /** Crafter with the Better Material's auto crafting layout, each slot holding the recipe's count. */
     private static BetterAutoCrafterBlockEntity placeBetterMaterialCrafter(GameTestHelper helper) {
         BetterAutoCrafterBlockEntity crafter = placeCrafter(helper);
-        ItemStack copper = new ItemStack(Items.COPPER_INGOT);
-        ItemStack iron = new ItemStack(Items.IRON_INGOT);
-        setGrid(crafter, copper, iron, copper, iron, new ItemStack(Items.REDSTONE_TORCH), iron, copper, iron, copper);
+        ItemStack copper = new ItemStack(Items.COPPER_INGOT, 6);
+        ItemStack iron = new ItemStack(Items.IRON_INGOT, 2);
+        setGrid(crafter, copper, iron, copper, iron, new ItemStack(Items.REDSTONE_TORCH, 5), iron, copper, iron, copper);
         return crafter;
     }
 

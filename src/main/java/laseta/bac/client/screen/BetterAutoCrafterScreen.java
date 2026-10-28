@@ -34,6 +34,17 @@ public class BetterAutoCrafterScreen extends AutoMachineScreen<BetterAutoCrafter
         this.titleLabelX = 29;
     }
 
+    /** Right of the crafting table's big result frame. */
+    @Override
+    protected int recipeButtonX() {
+        return 147;
+    }
+
+    @Override
+    protected int recipeButtonY() {
+        return 31;
+    }
+
     @Override
     protected void renderMachineBackground(GuiGraphics graphics) {
         graphics.blit(TEXTURE, leftPos, topPos, 0, 0, imageWidth, imageHeight);

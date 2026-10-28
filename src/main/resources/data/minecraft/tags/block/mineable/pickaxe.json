@@ -4,6 +4,7 @@
     "better_auto_crafter:translocator",
     "better_auto_crafter:better_auto_mover",
     "better_auto_crafter:better_auto_smelter",
-    "better_auto_crafter:better_auto_brewer"
+    "better_auto_crafter:better_auto_brewer",
+    "better_auto_crafter:steel_block"
   ]
 }

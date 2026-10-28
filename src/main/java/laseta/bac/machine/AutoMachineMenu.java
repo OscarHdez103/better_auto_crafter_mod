@@ -1,5 +1,6 @@
 package laseta.bac.machine;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -7,6 +8,8 @@ import laseta.bac.item.ItemSettingUpgradeItem;
 import laseta.bac.menu.slot.MachineUpgradeSlot;
 import laseta.bac.menu.slot.ResultPreviewSlot;
 import laseta.bac.menu.slot.UpgradeSlot;
+import laseta.bac.menu.transfer.GridFillPlanner;
+import laseta.bac.network.RecipeChoicesPayload;
 import laseta.bac.sideconfig.RelativeSide;
 import laseta.bac.sideconfig.SideMode;
 import laseta.bac.upgrade.UpgradeInventory;
@@ -15,6 +18,8 @@ import laseta.bac.upgrade.UpgradeSlotType;
 import laseta.bac.upgrade.UpgradeStatus;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.StringRepresentable;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
@@ -30,6 +35,7 @@ import net.minecraft.world.level.block.Block;
 import net.neoforged.neoforge.items.IItemHandler;
 import net.neoforged.neoforge.items.ItemStackHandler;
 import net.neoforged.neoforge.items.SlotItemHandler;
+import net.neoforged.neoforge.network.PacketDistributor;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -133,6 +139,12 @@ public abstract class AutoMachineMenu extends AbstractContainerMenu {
     private final ContainerData upgradeStatus;
     /** Cooldown, problem and redstone signal for the status icon (see MachineStatus.DATA_*). */
     private final ContainerData status;
+    /** The player the menu is open for, set with the player inventory: the server sends it the recipe choices. */
+    @Nullable
+    private Player player;
+    /** Client: as last received. Server: as last sent, null before the first time. */
+    @Nullable
+    private RecipeChoices recipeChoices;
     /** Client only: set by the screen while the upgrades tab is open, which shows the upgrade slots. */
     private boolean upgradeSlotsVisible;
     /** Client only: set by the screen while the machine's own tab is open, which shows its upgrade slots. */
@@ -199,6 +211,7 @@ public abstract class AutoMachineMenu extends AbstractContainerMenu {
     }
 
     protected void addPlayerInventory(Inventory playerInventory) {
+        player = playerInventory.player;
         playerInventoryStart = slots.size();
         for (int row = 0; row < 3; row++) {
             for (int col = 0; col < 9; col++) {
@@ -233,6 +246,48 @@ public abstract class AutoMachineMenu extends AbstractContainerMenu {
         return templateStart;
     }
 
+    /** How many template slots there are: a recipe filled in from JEI / EMI has at most that many inputs. */
+    public int templateSize() {
+        return templateEnd - templateStart;
+    }
+
+    /**
+     * Plans filling the template with a recipe's inputs, in slot order, from the player's inventory (see
+     * {@link GridFillPlanner}). Pure: changes nothing. Works on both sides.
+     */
+    public GridFillPlanner.Plan planFill(Player player, List<List<ItemStack>> wanted, boolean fillMaximum) {
+        List<ItemStack> template = new ArrayList<>(templateSize());
+        for (int i = templateStart; i < templateEnd; i++) {
+            template.add(slots.get(i).getItem());
+        }
+        return GridFillPlanner.plan(wanted, template, player.getInventory().items, fillMaximum);
+    }
+
+    /**
+     * Server side: fills the template (recipe transfer from JEI / EMI), then makes the machine use that recipe if the
+     * template makes several. Does nothing if the plan isn't valid.
+     *
+     * @param recipe the recipe that was transferred, if it is a real one
+     */
+    public void fillTemplate(Player player, List<List<ItemStack>> wanted, boolean fillMaximum, @Nullable ResourceLocation recipe) {
+        GridFillPlanner.Plan plan = planFill(player, wanted, fillMaximum);
+        if (!plan.canApply()) {
+            return;
+        }
+        for (int i = 0; i < templateSize(); i++) {
+            slots.get(templateStart + i).set(plan.grid().get(i));
+        }
+        Inventory inventory = player.getInventory();
+        for (int i = 0; i < inventory.items.size(); i++) {
+            inventory.items.set(i, plan.inventory().get(i));
+        }
+        inventory.setChanged();
+        if (recipe != null && blockEntity != null) {
+            blockEntity.chooseRecipe(recipe);
+        }
+        broadcastChanges();
+    }
+
     protected int templateEnd() {
         return templateEnd;
     }
@@ -240,6 +295,29 @@ public abstract class AutoMachineMenu extends AbstractContainerMenu {
     // ---------------------------------------------------------------------------------------------------------------
     // State
     // ---------------------------------------------------------------------------------------------------------------
+
+    /** The recipes the template could make and which one the machine makes (see {@link RecipeChoicesPayload}). */
+    public RecipeChoices getRecipeChoices() {
+        return recipeChoices == null ? RecipeChoices.NONE : recipeChoices;
+    }
+
+    /** Client only: the choices the server sent. */
+    public void setRecipeChoices(RecipeChoices choices) {
+        recipeChoices = choices;
+    }
+
+    /** Server only: sends the recipe choices along with everything else vanilla syncs, when they changed. */
+    @Override
+    public void broadcastChanges() {
+        super.broadcastChanges();
+        if (blockEntity != null && player instanceof ServerPlayer serverPlayer) {
+            RecipeChoices current = blockEntity.getRecipeChoices();
+            if (recipeChoices == null || !recipeChoices.sameAs(current)) {
+                recipeChoices = current;
+                PacketDistributor.sendToPlayer(serverPlayer, new RecipeChoicesPayload(containerId, current));
+            }
+        }
+    }
 
     /** The block entity on the server, null on the client. */
     @Nullable
@@ -385,6 +463,15 @@ public abstract class AutoMachineMenu extends AbstractContainerMenu {
         return settingButtonsStart() + slotIndex;
     }
 
+    /** Makes the machine use the recipe at {@code index} of its {@link #getRecipeChoices()}. */
+    public int chooseRecipeButton(int index) {
+        return recipeButtonsStart() + index;
+    }
+
+    private int recipeButtonsStart() {
+        return settingButtonsStart() + features.upgradeSlots().size();
+    }
+
     /**
      * Called on the server when the client sends a button click, and on the client for an instant (predicted) update.
      * On the server, writing to {@link #sideModes} / {@link #settings} / {@link #options} writes straight into the
@@ -392,8 +479,12 @@ public abstract class AutoMachineMenu extends AbstractContainerMenu {
      */
     @Override
     public boolean clickMenuButton(@NotNull Player player, int id) {
-        if (id < 0 || id >= settingButtonsStart() + features.upgradeSlots().size()) {
+        if (id < 0 || id >= recipeButtonsStart() + RecipeChoices.MAX) {
             return false;
+        }
+        if (id >= recipeButtonsStart()) {
+            // Only the server knows the recipes; the client waits for the new choices to arrive.
+            return blockEntity == null || blockEntity.chooseRecipe(id - recipeButtonsStart());
         }
         if (id >= settingButtonsStart()) {
             return setUpgradeSetting(id - settingButtonsStart());
@@ -450,14 +541,27 @@ public abstract class AutoMachineMenu extends AbstractContainerMenu {
      * carried item is never used up. Works the same on both sides (the carried item is synced).
      */
     private boolean setUpgradeSetting(int slotIndex) {
+        return setUpgradeSetting(slotIndex, getCarried());
+    }
+
+    /**
+     * Sets the item setting of the upgrade in one of the machine's upgrade slots to a copy of {@code setting} (one
+     * item), or clears it with EMPTY. Nothing is used up: the setting is only a filter, which is also why it may come
+     * from an item dragged from JEI / EMI.
+     *
+     * @return false if there is no such slot, its upgrade has no setting or can't be set to {@code setting}
+     */
+    public boolean setUpgradeSetting(int slotIndex, ItemStack setting) {
+        if (slotIndex < 0 || slotIndex >= features.upgradeSlots().size()) {
+            return false;
+        }
         Slot slot = getMachineUpgradeSlot(slotIndex);
         ItemStack upgrade = slot.getItem();
-        ItemStack carried = getCarried();
-        if (!(upgrade.getItem() instanceof ItemSettingUpgradeItem item) || (!carried.isEmpty() && !item.canBeSetTo(carried))) {
+        if (!(upgrade.getItem() instanceof ItemSettingUpgradeItem item) || (!setting.isEmpty() && !item.canBeSetTo(setting))) {
             return false;
         }
         ItemStack updated = upgrade.copy();
-        ItemSettingUpgradeItem.setSetting(updated, carried);
+        ItemSettingUpgradeItem.setSetting(updated, setting);
         slot.set(updated);
         return true;
     }

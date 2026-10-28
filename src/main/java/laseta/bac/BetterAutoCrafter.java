@@ -6,6 +6,7 @@ import com.mojang.logging.LogUtils;
 
 import laseta.bac.registry.ModBlockEntities;
 import laseta.bac.registry.ModBlocks;
+import laseta.bac.registry.ModConditions;
 import laseta.bac.registry.ModCreativeTabs;
 import laseta.bac.registry.ModDataComponents;
 import laseta.bac.registry.ModRecipeSerializers;
@@ -30,6 +31,7 @@ public class BetterAutoCrafter {
         ModDataComponents.register(modEventBus);
         ModRecipeSerializers.register(modEventBus);
         ModRecipeTypes.register(modEventBus);
+        ModConditions.register(modEventBus);
         ModCreativeTabs.register(modEventBus);
         modContainer.registerConfig(ModConfig.Type.COMMON, CommonConfig.SPEC);
     }

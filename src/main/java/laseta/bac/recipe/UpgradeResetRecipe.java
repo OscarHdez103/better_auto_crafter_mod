@@ -1,5 +1,6 @@
 package laseta.bac.recipe;
 
+import laseta.bac.item.ItemSettingUpgradeItem;
 import laseta.bac.item.LinkingUpgradeItem;
 import laseta.bac.registry.ModRecipeSerializers;
 import net.minecraft.core.HolderLookup;
@@ -12,12 +13,13 @@ import net.minecraft.world.level.Level;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * A linked upgrade (translocation, multi translocation or storage link) alone in a crafting grid gives the same upgrade without its link.
- * A "special" recipe (like vanilla's map cloning), so it only matches linked upgrades and recipe viewers don't list
- * it as a confusing "upgrade -> upgrade" recipe.
+ * An upgrade holding data alone in a crafting grid gives the same upgrade without it: a linked upgrade (translocation,
+ * multi translocation or storage link) loses its link, an upgrade set to an item (fuel filter, potion starter) its
+ * setting. A "special" recipe (like vanilla's map cloning), so it only matches upgrades holding data and recipe viewers
+ * don't list it as a confusing "upgrade -> upgrade" recipe.
  */
-public class UpgradeLinkResetRecipe extends CustomRecipe {
-    public UpgradeLinkResetRecipe(CraftingBookCategory category) {
+public class UpgradeResetRecipe extends CustomRecipe {
+    public UpgradeResetRecipe(CraftingBookCategory category) {
         super(category);
     }
 
@@ -33,11 +35,19 @@ public class UpgradeLinkResetRecipe extends CustomRecipe {
             return ItemStack.EMPTY;
         }
         ItemStack reset = upgrade.copyWithCount(1);
-        ((LinkingUpgradeItem) upgrade.getItem()).clearLinks(reset);
+        if (upgrade.getItem() instanceof LinkingUpgradeItem linking) {
+            linking.clearLinks(reset);
+        }
+        ItemSettingUpgradeItem.setSetting(reset, ItemStack.EMPTY);
         return reset;
     }
 
-    /** The single linked upgrade in the grid, or EMPTY if the grid holds anything else (or more than one item). */
+    /** Whether {@code stack} is an upgrade holding data this recipe clears. */
+    public static boolean holdsData(ItemStack stack) {
+        return LinkingUpgradeItem.isLinked(stack) || !ItemSettingUpgradeItem.getSetting(stack).isEmpty();
+    }
+
+    /** The single upgrade holding data in the grid, or EMPTY if the grid holds anything else (or more than one item). */
     private static ItemStack findUpgrade(CraftingInput input) {
         ItemStack found = ItemStack.EMPTY;
         for (int i = 0; i < input.size(); i++) {
@@ -45,7 +55,7 @@ public class UpgradeLinkResetRecipe extends CustomRecipe {
             if (stack.isEmpty()) {
                 continue;
             }
-            if (!found.isEmpty() || !LinkingUpgradeItem.isLinked(stack)) {
+            if (!found.isEmpty() || !holdsData(stack)) {
                 return ItemStack.EMPTY;
             }
             found = stack;
@@ -60,6 +70,6 @@ public class UpgradeLinkResetRecipe extends CustomRecipe {
 
     @Override
     public @NotNull RecipeSerializer<?> getSerializer() {
-        return ModRecipeSerializers.UPGRADE_LINK_RESET.get();
+        return ModRecipeSerializers.UPGRADE_RESET.get();
     }
 }

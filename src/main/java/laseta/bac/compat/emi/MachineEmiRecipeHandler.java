@@ -2,10 +2,11 @@ package laseta.bac.compat.emi;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import dev.emi.emi.api.recipe.EmiPlayerInventory;
 import dev.emi.emi.api.recipe.EmiRecipe;
-import dev.emi.emi.api.recipe.VanillaEmiRecipeCategories;
+import dev.emi.emi.api.recipe.EmiRecipeCategory;
 import dev.emi.emi.api.recipe.handler.EmiCraftContext;
 import dev.emi.emi.api.recipe.handler.EmiRecipeHandler;
 import dev.emi.emi.api.stack.EmiIngredient;
@@ -13,9 +14,8 @@ import dev.emi.emi.api.stack.EmiStack;
 import dev.emi.emi.api.widget.Bounds;
 import dev.emi.emi.api.widget.SlotWidget;
 import dev.emi.emi.api.widget.Widget;
-import laseta.bac.block.entity.BetterAutoCrafterBlockEntity;
 import laseta.bac.compat.RecipeFillHelper;
-import laseta.bac.menu.BetterAutoCrafterMenu;
+import laseta.bac.machine.AutoMachineMenu;
 import laseta.bac.menu.slot.ResultPreviewSlot;
 import laseta.bac.menu.slot.UpgradeSlot;
 import laseta.bac.menu.transfer.GridFillPlanner;
@@ -29,17 +29,30 @@ import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 
 /**
- * EMI fill button for crafting and auto crafting recipes. Places whatever ingredients the player has (one of each: the
- * grid is only the recipe's layout); slots it can't fill are highlighted in red but the button still works. It is only
- * disabled when nothing at all can be placed.
+ * EMI fill button that fills a machine's template with a recipe's inputs, in order: the crafter's grid with crafting
+ * and auto crafting recipes, the smelter's input with any cooking recipe. Places whatever ingredients the player has, as
+ * many as one operation takes; slots it can't fill are highlighted in red but the button still works. It is only
+ * disabled when nothing at all can be placed. The machine then makes that very recipe, if its template makes several.
  */
-public class AutoCrafterEmiRecipeHandler implements EmiRecipeHandler<BetterAutoCrafterMenu> {
+public class MachineEmiRecipeHandler<M extends AutoMachineMenu> implements EmiRecipeHandler<M> {
     /** Same colour EMI uses for missing ingredients on its own crafting handlers. */
     private static final int MISSING_SLOT_COLOR = 0x44FF0000;
 
+    private final Set<EmiRecipeCategory> categories;
+    private final int templateSize;
+
+    /**
+     * @param categories   categories whose recipes list their inputs in the template's slot order
+     * @param templateSize the machine's template slots
+     */
+    public MachineEmiRecipeHandler(Set<EmiRecipeCategory> categories, int templateSize) {
+        this.categories = Set.copyOf(categories);
+        this.templateSize = templateSize;
+    }
+
     @Override
-    public EmiPlayerInventory getInventory(AbstractContainerScreen<BetterAutoCrafterMenu> screen) {
-        // Everything the grid can be filled from: the grid itself and the player's inventory.
+    public EmiPlayerInventory getInventory(AbstractContainerScreen<M> screen) {
+        // Everything the template can be filled from: the template itself and the player's inventory.
         List<EmiStack> stacks = new ArrayList<>();
         for (Slot slot : screen.getMenu().slots) {
             if (!(slot instanceof ResultPreviewSlot) && !(slot instanceof UpgradeSlot) && slot.hasItem()) {
@@ -51,12 +64,11 @@ public class AutoCrafterEmiRecipeHandler implements EmiRecipeHandler<BetterAutoC
 
     @Override
     public boolean supportsRecipe(EmiRecipe recipe) {
-        return (recipe.getCategory() == VanillaEmiRecipeCategories.CRAFTING || recipe.getCategory() == EmiCompat.AUTO_CRAFTING)
-                && recipe.getInputs().size() <= BetterAutoCrafterBlockEntity.GRID_SIZE;
+        return categories.contains(recipe.getCategory()) && recipe.getInputs().size() <= templateSize;
     }
 
     @Override
-    public boolean canCraft(EmiRecipe recipe, EmiCraftContext<BetterAutoCrafterMenu> context) {
+    public boolean canCraft(EmiRecipe recipe, EmiCraftContext<M> context) {
         GridFillPlanner.Plan plan = plan(recipe, context);
         if (context.getType() == EmiCraftContext.Type.CRAFTABLE) {
             // EMI's "craftables" list should only show recipes the player can fully make.
@@ -66,18 +78,18 @@ public class AutoCrafterEmiRecipeHandler implements EmiRecipeHandler<BetterAutoC
     }
 
     @Override
-    public boolean craft(EmiRecipe recipe, EmiCraftContext<BetterAutoCrafterMenu> context) {
+    public boolean craft(EmiRecipe recipe, EmiCraftContext<M> context) {
         // The result can't be taken out of this block, so "craft straight to cursor/inventory" isn't supported.
         if (context.getDestination() != EmiCraftContext.Destination.NONE || !plan(recipe, context).canApply()) {
             return false;
         }
-        RecipeFillHelper.requestFill(context.getScreenHandler(), wanted(recipe), context.getAmount() > 1);
+        RecipeFillHelper.requestFill(context.getScreenHandler(), wanted(recipe), context.getAmount() > 1, recipe.getId());
         Minecraft.getInstance().setScreen(context.getScreen());
         return true;
     }
 
     @Override
-    public List<ClientTooltipComponent> getTooltip(EmiRecipe recipe, EmiCraftContext<BetterAutoCrafterMenu> context) {
+    public List<ClientTooltipComponent> getTooltip(EmiRecipe recipe, EmiCraftContext<M> context) {
         GridFillPlanner.Plan plan = plan(recipe, context);
         List<ClientTooltipComponent> tooltip = new ArrayList<>(EmiRecipeHandler.super.getTooltip(recipe, context));
         if (!plan.fits()) {
@@ -90,7 +102,7 @@ public class AutoCrafterEmiRecipeHandler implements EmiRecipeHandler<BetterAutoC
     }
 
     @Override
-    public void render(EmiRecipe recipe, EmiCraftContext<BetterAutoCrafterMenu> context, List<Widget> widgets, GuiGraphics graphics) {
+    public void render(EmiRecipe recipe, EmiCraftContext<M> context, List<Widget> widgets, GuiGraphics graphics) {
         boolean[] missing = plan(recipe, context).missing();
         List<EmiIngredient> inputs = recipe.getInputs();
         for (Widget widget : widgets) {
@@ -106,18 +118,20 @@ public class AutoCrafterEmiRecipeHandler implements EmiRecipeHandler<BetterAutoC
 
     // ---------------------------------------------------------------------------------------------------------------
 
-    private static GridFillPlanner.Plan plan(EmiRecipe recipe, EmiCraftContext<BetterAutoCrafterMenu> context) {
+    private GridFillPlanner.Plan plan(EmiRecipe recipe, EmiCraftContext<M> context) {
         Minecraft minecraft = Minecraft.getInstance();
         return context.getScreenHandler().planFill(minecraft.player, wanted(recipe), false);
     }
 
     /**
      * EMI crafting recipes list their inputs in 3x3 grid order (shaped recipes are padded with empty slots), and so do
-     * auto crafting recipes.
+     * auto crafting recipes; cooking recipes have a single input.
      */
     private static List<List<ItemStack>> wanted(EmiRecipe recipe) {
         return recipe.getInputs().stream()
-                .map(ingredient -> RecipeFillHelper.candidates(ingredient.getEmiStacks().stream().map(EmiStack::getItemStack)))
+                // The ingredient holds the amount, its stacks may not: one craft takes that many.
+                .map(ingredient -> RecipeFillHelper.candidates(ingredient.getEmiStacks().stream()
+                        .map(stack -> stack.getItemStack().copyWithCount((int) Math.max(1, ingredient.getAmount())))))
                 .toList();
     }
 

@@ -11,6 +11,7 @@ import laseta.bac.machine.MachineProblem;
 import laseta.bac.machine.RedstoneMode;
 import laseta.bac.item.LinkingUpgradeItem;
 import laseta.bac.registry.ModBlocks;
+import laseta.bac.material.Materials;
 import laseta.bac.registry.ModCreativeTabs;
 import laseta.bac.registry.ModDataComponents;
 import laseta.bac.registry.ModItems;
@@ -204,7 +205,10 @@ public final class StorageLinkGameTests {
         tab.buildContents(new CreativeModeTab.ItemDisplayParameters(helper.getLevel().enabledFeatures(), false,
                 helper.getLevel().registryAccess()));
         for (DeferredHolder<Item, ? extends Item> item : ModItems.ITEMS.getEntries()) {
-            helper.assertTrue(tab.contains(item.get().getDefaultInstance()), item.getId() + " must be in the mod's tab");
+            // Except its steel while another mod provides steel instead.
+            if (!Materials.isHidden(item.get(), helper.getLevel().registryAccess())) {
+                helper.assertTrue(tab.contains(item.get().getDefaultInstance()), item.getId() + " must be in the mod's tab");
+            }
         }
         helper.succeed();
     }

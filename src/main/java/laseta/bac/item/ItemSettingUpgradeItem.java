@@ -52,10 +52,13 @@ public abstract class ItemSettingUpgradeItem extends Item {
                                 @NotNull TooltipFlag flag) {
         tooltip.add(Component.translatable(descriptionKey()).withStyle(ChatFormatting.GRAY));
         ItemStack setting = getSetting(stack);
-        tooltip.add(setting.isEmpty()
-                ? Component.translatable("item.better_auto_crafter.item_setting_upgrade.not_set").withStyle(ChatFormatting.RED)
-                : Component.translatable("item.better_auto_crafter.item_setting_upgrade.set_to", setting.getHoverName())
+        if (setting.isEmpty()) {
+            tooltip.add(Component.translatable("item.better_auto_crafter.item_setting_upgrade.not_set").withStyle(ChatFormatting.RED));
+            return;
+        }
+        tooltip.add(Component.translatable("item.better_auto_crafter.item_setting_upgrade.set_to", setting.getHoverName())
                 .withStyle(ChatFormatting.DARK_AQUA));
+        tooltip.add(Component.translatable("item.better_auto_crafter.item_setting_upgrade.reset_hint").withStyle(ChatFormatting.DARK_GRAY));
     }
 
     @Override

@@ -1,0 +1,13 @@
+{
+  "type": "better_auto_crafter:auto_smelting",
+  "ingredient": {
+    "tag": "c:ingots/iron",
+    "count": 3
+  },
+  "result": {
+    "id": "better_auto_crafter:steel_ingot",
+    "count": 1
+  },
+  "result_tag": "c:ingots/steel",
+  "fuel": 400
+}

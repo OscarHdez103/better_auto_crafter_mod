@@ -1,6 +1,7 @@
 package laseta.bac.client.screen.widget;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -34,8 +35,9 @@ import org.jetbrains.annotations.Nullable;
  *     <li>Face channels: the channel's icon above a cube net of the machine's faces. Clicking a face turns it on or off
  *     for the channel; faces that are on are tinted in the channel's colour.</li>
  *     <li>Upgrade slots: real menu slots the screen shows while the tab is open. A configurable one has a box next to it
- *     showing the item its upgrade is set to: clicking it with an item sets the upgrade to a copy of that item (nothing
- *     is used up), with an empty hand clears it.</li>
+ *     showing the item its upgrade is set to: clicking it with an item (or dropping one dragged from JEI / EMI on it)
+ *     sets the upgrade to a copy of that item (nothing is used up), with an empty hand clears it. While no upgrade
+ *     with a setting is installed, the box is a hatched plate instead, so it doesn't look like a slot.</li>
  * </ul>
  *
  * <p>Texts, from {@link MachineText} (so worded per machine): "option.&lt;option&gt;" for the option's name,
@@ -55,8 +57,11 @@ public class MachineTab extends SideTab {
     private static final int BUTTON_SHADOW = 0xFF3A2058;
     private static final int FACE_OFF_OVERLAY = 0x90201030;
     private static final int HOVER_OVERLAY = 0x80FFFFFF;
-    private static final int DISABLED_OVERLAY = 0xA04E2F75;
     private static final int SETTING_FRAME = 0xFFFFC94A;
+    private static final int UNAVAILABLE_FRAME = 0xFF3A2058;
+    private static final int UNAVAILABLE_FILL = 0xFF2A1840;
+    private static final int UNAVAILABLE_STRIPE = 0xFF4A2C70;
+    private static final int UNAVAILABLE_STRIPE_SPACING = 4;
 
     /** Draws the 16x16 icon of one value of one of the machine's options. */
     @FunctionalInterface
@@ -258,12 +263,11 @@ public class MachineTab extends SideTab {
         }
     }
 
-    /** The item the installed upgrade is set to, in a gold frame; dimmed while no upgrade that takes one is installed. */
+    /** The item the installed upgrade is set to, in a gold frame; a hatched plate while no upgrade that takes one is installed. */
     private void drawSetting(GuiGraphics graphics, ScreenRectangle rect, int slotIndex, boolean hovered) {
         ItemStack upgrade = settingUpgrade(slotIndex);
         if (upgrade == null) {
-            SlotWidgets.drawSlot(graphics, rect.left(), rect.top());
-            graphics.fill(rect.left() + 1, rect.top() + 1, rect.right() - 1, rect.bottom() - 1, DISABLED_OVERLAY);
+            drawUnavailable(graphics, rect);
             return;
         }
         SlotWidgets.drawColoredSlot(graphics, rect.left(), rect.top(), SETTING_FRAME);
@@ -277,6 +281,44 @@ public class MachineTab extends SideTab {
             graphics.fill(rect.left() + 1, rect.top() + 1, rect.right() - 1, rect.bottom() - 1, HOVER_OVERLAY);
             graphics.pose().popPose();
         }
+    }
+
+    /** A flat plate with diagonal stripes, darker than the tab: clearly not a slot, nothing to put there. */
+    private static void drawUnavailable(GuiGraphics graphics, ScreenRectangle rect) {
+        int left = rect.left();
+        int top = rect.top();
+        graphics.fill(left, top, rect.right(), rect.bottom(), UNAVAILABLE_FRAME);
+        graphics.fill(left + 1, top + 1, rect.right() - 1, rect.bottom() - 1, UNAVAILABLE_FILL);
+        for (int y = 1; y < rect.height() - 1; y++) {
+            for (int x = 1; x < rect.width() - 1; x++) {
+                if ((x + y) % UNAVAILABLE_STRIPE_SPACING == 0) {
+                    graphics.fill(left + x, top + y, left + x + 1, top + y + 1, UNAVAILABLE_STRIPE);
+                }
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // Ghost ingredients (JEI / EMI)
+    // ---------------------------------------------------------------------------------------------------------------
+
+    /**
+     * The setting boxes {@code stack} may be dropped on right now, by upgrade slot index, on screen: only while the tab
+     * is fully open, and only those whose installed upgrade can be set to it.
+     */
+    public Map<Integer, ScreenRectangle> getSettingTargets(ItemStack stack) {
+        Map<Integer, ScreenRectangle> targets = new LinkedHashMap<>();
+        if (!isFullyOpen() || stack.isEmpty()) {
+            return targets;
+        }
+        for (int i = 0; i < upgradeSlots().size(); i++) {
+            ItemStack upgrade = settingUpgrade(i);
+            if (upgradeSlots().get(i).configurable() && upgrade != null
+                    && ((ItemSettingUpgradeItem) upgrade.getItem()).canBeSetTo(stack)) {
+                targets.put(i, rect(new Element.UpgradeSetting(i)));
+            }
+        }
+        return targets;
     }
 
     // ---------------------------------------------------------------------------------------------------------------

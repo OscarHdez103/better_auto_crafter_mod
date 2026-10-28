@@ -2,13 +2,16 @@
   "type": "minecraft:crafting_shaped",
   "category": "redstone",
   "pattern": [
-    " S ",
+    "STS",
     "GRG",
-    " S "
+    "STS"
   ],
   "key": {
     "S": {
       "item": "minecraft:sugar"
+    },
+    "T": {
+      "tag": "c:ingots/steel"
     },
     "G": {
       "item": "minecraft:gold_ingot"

@@ -6,6 +6,7 @@ import laseta.bac.block.BetterAutoBrewerBlock;
 import laseta.bac.block.BetterAutoMoverBlock;
 import laseta.bac.block.BetterAutoSmelterBlock;
 import laseta.bac.block.TranslocatorBlock;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.properties.NoteBlockInstrument;
@@ -52,6 +53,16 @@ public final class ModBlocks {
                     .instrument(NoteBlockInstrument.BASEDRUM)
                     .strength(3.5F)
                     .sound(SoundType.STONE));
+
+    /** Storage block of the mod's steel, like a block of iron (see {@link laseta.bac.material.Materials#STEEL}). */
+    public static final DeferredBlock<Block> STEEL_BLOCK = BLOCKS.registerSimpleBlock(
+            "steel_block",
+            BlockBehaviour.Properties.of()
+                    .mapColor(MapColor.METAL)
+                    .instrument(NoteBlockInstrument.IRON_XYLOPHONE)
+                    .requiresCorrectToolForDrops()
+                    .strength(5.0F, 6.0F)
+                    .sound(SoundType.METAL));
 
     public static final DeferredBlock<TranslocatorBlock> TRANSLOCATOR = BLOCKS.registerBlock(
             "translocator",

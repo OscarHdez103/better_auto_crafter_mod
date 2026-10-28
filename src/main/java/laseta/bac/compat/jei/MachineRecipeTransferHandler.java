@@ -3,14 +3,13 @@ package laseta.bac.compat.jei;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 
-import laseta.bac.block.entity.BetterAutoCrafterBlockEntity;
 import laseta.bac.compat.RecipeFillHelper;
-import laseta.bac.menu.BetterAutoCrafterMenu;
+import laseta.bac.machine.AutoMachineMenu;
 import laseta.bac.menu.transfer.GridFillPlanner;
-import laseta.bac.registry.ModMenuTypes;
 import mezz.jei.api.gui.builder.ITooltipBuilder;
 import mezz.jei.api.gui.ingredient.IRecipeSlotView;
 import mezz.jei.api.gui.ingredient.IRecipeSlotsView;
@@ -31,32 +30,39 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * JEI "+" button for crafting and auto crafting recipes. Places whatever ingredients the player has (one of each: the
- * grid is only the recipe's layout); slots it can't fill are highlighted in red but the button still works. It is only
- * disabled when nothing at all can be placed.
+ * JEI "+" button that fills a machine's template with a recipe's inputs, in order: the crafter's grid with crafting and
+ * auto crafting recipes, the smelter's input with any cooking recipe. Places whatever ingredients the player has, as
+ * many as one operation takes (or as many operations' worth as fit, with shift); slots it can't fill are highlighted in
+ * red but the button still works. It is only disabled when nothing at all can be placed. The machine then makes that
+ * very recipe, if its template makes several.
  */
-public class AutoCrafterRecipeTransferHandler<R extends Recipe<?>>
-        implements IRecipeTransferHandler<BetterAutoCrafterMenu, RecipeHolder<R>> {
+public class MachineRecipeTransferHandler<C extends AutoMachineMenu, R extends Recipe<?>>
+        implements IRecipeTransferHandler<C, RecipeHolder<R>> {
     private static final int MISSING_SLOT_COLOR = 0x66FF0000;
     private static final int PARTIAL_BUTTON_COLOR = 0x80FFA500;
 
     private final IRecipeTransferHandlerHelper helper;
+    private final Class<C> menuClass;
+    private final Supplier<MenuType<C>> menuType;
     private final RecipeType<RecipeHolder<R>> recipeType;
 
-    /** @param recipeType a category that always lays its inputs out as the 3x3 grid, in order */
-    public AutoCrafterRecipeTransferHandler(IRecipeTransferHandlerHelper helper, RecipeType<RecipeHolder<R>> recipeType) {
+    /** @param recipeType a category whose inputs are laid out in the template's slot order */
+    public MachineRecipeTransferHandler(IRecipeTransferHandlerHelper helper, Class<C> menuClass, Supplier<MenuType<C>> menuType,
+                                        RecipeType<RecipeHolder<R>> recipeType) {
         this.helper = helper;
+        this.menuClass = menuClass;
+        this.menuType = menuType;
         this.recipeType = recipeType;
     }
 
     @Override
-    public @NotNull Class<? extends BetterAutoCrafterMenu> getContainerClass() {
-        return BetterAutoCrafterMenu.class;
+    public @NotNull Class<? extends C> getContainerClass() {
+        return menuClass;
     }
 
     @Override
-    public @NotNull Optional<MenuType<BetterAutoCrafterMenu>> getMenuType() {
-        return Optional.of(ModMenuTypes.BETTER_AUTO_CRAFTER.get());
+    public @NotNull Optional<MenuType<C>> getMenuType() {
+        return Optional.of(menuType.get());
     }
 
     @Override
@@ -67,12 +73,12 @@ public class AutoCrafterRecipeTransferHandler<R extends Recipe<?>>
     // Still the abstract method in JEI 19 (the newer context-based overload just forwards here), so it must be implemented.
     @SuppressWarnings("removal")
     @Override
-    public @Nullable IRecipeTransferError transferRecipe(@NotNull BetterAutoCrafterMenu menu, @NotNull RecipeHolder<R> recipe,
+    public @Nullable IRecipeTransferError transferRecipe(@NotNull C menu, @NotNull RecipeHolder<R> recipe,
                                                          IRecipeSlotsView recipeSlots, @NotNull Player player,
                                                          boolean maxTransfer, boolean doTransfer) {
-        // JEI's crafting category (and the auto crafting one) always lays its inputs out as the 3x3 grid, in order.
+        // JEI's crafting categories lay their inputs out as the 3x3 grid, in order; cooking ones have a single input.
         List<IRecipeSlotView> inputs = recipeSlots.getSlotViews(RecipeIngredientRole.INPUT);
-        if (inputs.size() > BetterAutoCrafterBlockEntity.GRID_SIZE) {
+        if (inputs.size() > menu.templateSize()) {
             return helper.createUserErrorWithTooltip(Component.translatable("gui.better_auto_crafter.transfer.too_large"));
         }
 
@@ -80,7 +86,7 @@ public class AutoCrafterRecipeTransferHandler<R extends Recipe<?>>
                 .map(view -> RecipeFillHelper.candidates(view.getItemStacks()))
                 .toList();
 
-        // Checked without fillMaximum: this runs every frame while hovering, and the one-craft plan already
+        // Checked without fillMaximum: this runs every frame while hovering, and the one-operation plan already
         // tells us everything needed for the button state. The server does the real (possibly maximum) fill.
         GridFillPlanner.Plan plan = menu.planFill(player, wanted, false);
         if (!plan.fits()) {
@@ -98,7 +104,7 @@ public class AutoCrafterRecipeTransferHandler<R extends Recipe<?>>
         }
 
         if (doTransfer) {
-            RecipeFillHelper.requestFill(menu, wanted, maxTransfer);
+            RecipeFillHelper.requestFill(menu, wanted, maxTransfer, recipe.id());
         }
         return missing.isEmpty() ? null : new PartialTransferError(missing);
     }

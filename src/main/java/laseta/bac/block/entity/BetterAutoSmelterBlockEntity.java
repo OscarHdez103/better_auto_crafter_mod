@@ -1,5 +1,6 @@
 package laseta.bac.block.entity;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -13,6 +14,7 @@ import laseta.bac.machine.ItemTransfer;
 import laseta.bac.machine.MachineFeatures;
 import laseta.bac.machine.MachineProblem;
 import laseta.bac.machine.MachineUpgradeSlotType;
+import laseta.bac.machine.RecipeChoices;
 import laseta.bac.menu.BetterAutoSmelterMenu;
 import laseta.bac.recipe.AutoSmeltingRecipe;
 import laseta.bac.registry.ModBlockEntities;
@@ -22,6 +24,7 @@ import laseta.bac.upgrade.TranslocationMode;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
@@ -43,8 +46,9 @@ import org.jetbrains.annotations.Nullable;
  * result, with any recipe a furnace, blast furnace, smoker or campfire has, or one of its own
  * ({@link AutoSmeltingRecipe}, which can take several items at once). Every recipe takes the machine's base speed.
  *
- * <p>Recipes are tried in this order: its own; campfire recipes, which need no fuel; blasting and smoking recipes,
- * which use half a furnace's fuel; and furnace recipes. Fuel is counted in furnace burn ticks, and a recipe uses its
+ * <p>Recipes are tried in this order: its own (once the input slot holds as many items as they take); campfire
+ * recipes, which need no fuel; blasting and smoking recipes, which use half a furnace's fuel; and furnace recipes. The
+ * player can pick any other recipe that matches instead, of another kind or the same ({@link #chooseRecipe}). Fuel is counted in furnace burn ticks, and a recipe uses its
  * cooking time's worth, as a furnace burns while cooking (so 200 for most furnace recipes, 100 for blasting and
  * smoking ones). Fuel comes from the fuel faces, only when the stored fuel isn't enough; what is left of a fuel (the
  * bucket of a lava bucket) goes to the leftover faces. A Fuel Filter Upgrade limits it to one fuel.</p>
@@ -95,18 +99,24 @@ public class BetterAutoSmelterBlockEntity extends AutoMachineBlockEntity {
     }
 
     /**
-     * The recipe for the input slot's item.
+     * A recipe for the input slot's items.
      *
      * @param amount items each operation takes
      * @param fuel   fuel each operation uses, in furnace burn ticks
      */
-    private record Cooking(Kind kind, Recipe<SingleRecipeInput> recipe, int amount, int fuel, ItemStack result) {
+    private record Cooking(Kind kind, ResourceLocation id, Recipe<SingleRecipeInput> recipe, int amount, int fuel,
+                           ItemStack result) {
     }
 
     private final FuelTank fuel = new FuelTank(this::setChanged);
-    @Nullable
-    private Cooking cachedCooking;
+    /** Every recipe for the input slot's items, in the order they are tried. */
+    private List<Cooking> cachedCookings = List.of();
+    /** Index in {@link #cachedCookings} of the one used, -1 for none. */
+    private int cachedChosen = -1;
     private boolean cookingDirty = true;
+    /** The recipe the player picked, used whenever it matches the input slot's items. */
+    @Nullable
+    private ResourceLocation chosenRecipe;
 
     public BetterAutoSmelterBlockEntity(BlockPos pos, BlockState state) {
         super(ModBlockEntities.BETTER_AUTO_SMELTER.get(), pos, state, 1, 1, FEATURES);
@@ -115,12 +125,6 @@ public class BetterAutoSmelterBlockEntity extends AutoMachineBlockEntity {
     @Override
     protected int getBaseSpeed() {
         return CommonConfig.smelterBaseSpeed();
-    }
-
-    /** The input slot only says what to cook: how many each operation takes comes from the recipe. */
-    @Override
-    protected int getTemplateSlotLimit() {
-        return 1;
     }
 
     @Override
@@ -136,50 +140,92 @@ public class BetterAutoSmelterBlockEntity extends AutoMachineBlockEntity {
     // Recipe
     // ---------------------------------------------------------------------------------------------------------------
 
+    private void updateCooking() {
+        if (!cookingDirty || level == null || level.isClientSide) {
+            return;
+        }
+        cookingDirty = false;
+        cachedCookings = findCookings(getTemplate().getStackInSlot(0));
+        cachedChosen = cachedCookings.isEmpty() ? -1 : 0;
+        for (int i = 0; i < cachedCookings.size(); i++) {
+            if (cachedCookings.get(i).id().equals(chosenRecipe)) {
+                cachedChosen = i;
+            }
+        }
+    }
+
+    /** The recipe the smelter cooks with: the player's choice if it matches, otherwise the first one tried. */
     @Nullable
     private Cooking cooking() {
-        if (cookingDirty && level != null && !level.isClientSide) {
-            cookingDirty = false;
-            cachedCooking = findCooking(getTemplate().getStackInSlot(0));
-        }
-        return cachedCooking;
+        updateCooking();
+        return cachedChosen < 0 ? null : cachedCookings.get(cachedChosen);
     }
 
-    @Nullable
-    private Cooking findCooking(ItemStack stack) {
+    private List<Cooking> findCookings(ItemStack stack) {
+        List<Cooking> found = new ArrayList<>();
         if (stack.isEmpty() || level == null) {
-            return null;
+            return found;
         }
-        SingleRecipeInput input = new SingleRecipeInput(stack.copyWithCount(1));
-        AutoSmeltingRecipe own = level.getRecipeManager().getRecipeFor(ModRecipeTypes.AUTO_SMELTING.get(), input, level)
-                .map(RecipeHolder::value).orElse(null);
-        if (own != null) {
-            return cooking(Kind.AUTO_SMELTING, own, own.getIngredient().count(), own.getFuel(), input);
+        // Its own recipes see the whole stack, as they need several items; the others cook one at a time.
+        SingleRecipeInput all = new SingleRecipeInput(stack);
+        for (RecipeHolder<AutoSmeltingRecipe> holder : matchingRecipes(ModRecipeTypes.AUTO_SMELTING.get(), all)) {
+            AutoSmeltingRecipe own = holder.value();
+            addCooking(found, Kind.AUTO_SMELTING, holder.id(), own, stack, own.getIngredient().count(), own.getFuel());
         }
-        Cooking found = vanilla(Kind.CAMPFIRE, RecipeType.CAMPFIRE_COOKING, input);
-        if (found == null) {
-            found = vanilla(Kind.BLASTING, RecipeType.BLASTING, input);
-        }
-        if (found == null) {
-            found = vanilla(Kind.SMOKING, RecipeType.SMOKING, input);
-        }
-        return found != null ? found : vanilla(Kind.SMELTING, RecipeType.SMELTING, input);
+        SingleRecipeInput one = new SingleRecipeInput(stack.copyWithCount(1));
+        addVanilla(found, Kind.CAMPFIRE, RecipeType.CAMPFIRE_COOKING, one);
+        addVanilla(found, Kind.BLASTING, RecipeType.BLASTING, one);
+        addVanilla(found, Kind.SMOKING, RecipeType.SMOKING, one);
+        addVanilla(found, Kind.SMELTING, RecipeType.SMELTING, one);
+        return found;
     }
 
-    @Nullable
-    private <R extends AbstractCookingRecipe> Cooking vanilla(Kind kind, RecipeType<R> type, SingleRecipeInput input) {
-        R recipe = level.getRecipeManager().getRecipeFor(type, input, level).map(RecipeHolder::value).orElse(null);
-        if (recipe == null) {
-            return null;
+    private <R extends AbstractCookingRecipe> void addVanilla(List<Cooking> found, Kind kind, RecipeType<R> type,
+                                                              SingleRecipeInput input) {
+        for (RecipeHolder<R> holder : matchingRecipes(type, input)) {
+            // A furnace burns fuel all the while it cooks; a campfire needs none.
+            int fuelCost = kind == Kind.CAMPFIRE ? 0 : Math.max(0, holder.value().getCookingTime());
+            addCooking(found, kind, holder.id(), holder.value(), input.item(), 1, fuelCost);
         }
-        // A furnace burns fuel all the while it cooks; a campfire needs none.
-        return cooking(kind, recipe, 1, kind == Kind.CAMPFIRE ? 0 : Math.max(0, recipe.getCookingTime()), input);
     }
 
-    @Nullable
-    private Cooking cooking(Kind kind, Recipe<SingleRecipeInput> recipe, int amount, int fuelCost, SingleRecipeInput input) {
-        ItemStack result = recipe.assemble(input, level.registryAccess());
-        return result.isEmpty() ? null : new Cooking(kind, recipe, Math.max(1, amount), fuelCost, result);
+    private void addCooking(List<Cooking> found, Kind kind, ResourceLocation id, Recipe<SingleRecipeInput> recipe,
+                            ItemStack stack, int amount, int fuelCost) {
+        int taken = Math.max(1, amount);
+        ItemStack result = recipe.assemble(new SingleRecipeInput(stack.copyWithCount(taken)), level.registryAccess());
+        if (!result.isEmpty()) {
+            found.add(new Cooking(kind, id, recipe, taken, fuelCost, result));
+        }
+    }
+
+    @Override
+    public RecipeChoices getRecipeChoices() {
+        updateCooking();
+        return new RecipeChoices(cachedCookings.stream()
+                .map(cooking -> new RecipeChoices.Choice(cooking.result(), Kind.toId(cooking.kind())))
+                .toList(), cachedChosen);
+    }
+
+    @Override
+    public boolean chooseRecipe(ResourceLocation id) {
+        updateCooking();
+        for (int i = 0; i < cachedCookings.size(); i++) {
+            if (cachedCookings.get(i).id().equals(id)) {
+                return chooseRecipe(i);
+            }
+        }
+        return false;
+    }
+
+    @Override
+    public boolean chooseRecipe(int index) {
+        updateCooking();
+        if (index < 0 || index >= cachedCookings.size()) {
+            return false;
+        }
+        chosenRecipe = cachedCookings.get(index).id();
+        onRecipeChosen();
+        return true;
     }
 
     /** Server only: what the input slot's item cooks into; EMPTY if nothing. */
@@ -224,10 +270,11 @@ public class BetterAutoSmelterBlockEntity extends AutoMachineBlockEntity {
     /** Whether the smelter may burn {@code stack}: any fuel, or only the filter's. */
     public boolean isAllowedFuel(ItemStack stack) {
         ItemStack filter = fuelFilter();
-        return (filter.isEmpty() || ItemStack.isSameItemSameComponents(filter, stack)) && burnTime(stack) > 0;
+        return (filter.isEmpty() || ItemStack.isSameItemSameComponents(filter, stack)) && fuelValue(stack) > 0;
     }
 
-    private static int burnTime(ItemStack stack) {
+    /** The fuel {@code stack} gives, in furnace burn ticks; 0 if it isn't a fuel. */
+    public static int fuelValue(ItemStack stack) {
         return stack.getBurnTime(RecipeType.SMELTING);
     }
 
@@ -257,7 +304,7 @@ public class BetterAutoSmelterBlockEntity extends AutoMachineBlockEntity {
         if (missing > 0) {
             List<IItemHandler> fuelInventories = getChannelInventories(level, FUEL);
             List<IItemHandler> leftovers = getChannelInventories(level, FUEL_LEFTOVERS);
-            transfer.pull(new ItemTransfer.Pull(fuelInventories, this::isAllowedFuel, BetterAutoSmelterBlockEntity::burnTime,
+            transfer.pull(new ItemTransfer.Pull(fuelInventories, this::isAllowedFuel, BetterAutoSmelterBlockEntity::fuelValue,
                     missing, MachineProblem.NO_FUEL, leftovers, fuel::add));
         }
         ItemStack wanted = getTemplate().getStackInSlot(0).copyWithCount(cooking.amount());
@@ -273,7 +320,7 @@ public class BetterAutoSmelterBlockEntity extends AutoMachineBlockEntity {
         if (pulled.getFirst().isEmpty()) {
             return null;
         }
-        SingleRecipeInput input = new SingleRecipeInput(pulled.getFirst().getFirst().copyWithCount(1));
+        SingleRecipeInput input = new SingleRecipeInput(pulled.getFirst().getFirst().copyWithCount(cooking.amount()));
         if (!cooking.recipe().matches(input, level)) {
             return null;
         }
@@ -292,12 +339,16 @@ public class BetterAutoSmelterBlockEntity extends AutoMachineBlockEntity {
     protected void saveAdditional(@NotNull CompoundTag tag, HolderLookup.@NotNull Provider registries) {
         super.saveAdditional(tag, registries);
         tag.put("fuel", fuel.save());
+        if (chosenRecipe != null) {
+            tag.putString("chosen_recipe", chosenRecipe.toString());
+        }
     }
 
     @Override
     protected void loadAdditional(@NotNull CompoundTag tag, HolderLookup.@NotNull Provider registries) {
         super.loadAdditional(tag, registries);
         fuel.load(tag.getCompound("fuel"));
+        chosenRecipe = tag.contains("chosen_recipe") ? ResourceLocation.tryParse(tag.getString("chosen_recipe")) : null;
         cookingDirty = true;
     }
 

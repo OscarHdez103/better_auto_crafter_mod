@@ -4,11 +4,14 @@ import java.util.ArrayList;
 import java.util.List;
 
 import laseta.bac.block.entity.BetterAutoSmelterBlockEntity;
+import laseta.bac.client.screen.widget.ChoicePopup;
 import laseta.bac.client.screen.widget.FuelGauge;
 import laseta.bac.client.screen.widget.MachineStatusIcon;
+import laseta.bac.machine.RecipeChoices;
 import laseta.bac.menu.BetterAutoSmelterMenu;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.renderer.RenderType;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
@@ -20,6 +23,7 @@ import org.jetbrains.annotations.NotNull;
  * The smelter's screen: the input slot, a furnace's arrow (which fills up during the cooldown, as a furnace's does
  * while cooking) and the result, with the block that would cook such a recipe below the arrow, and the stored fuel as a
  * black gauge on the left. The input slot shows how many items each operation takes when it is more than one.
+ * When other kinds of recipe can cook the input too, clicking that block picks another.
  */
 public class BetterAutoSmelterScreen extends AutoMachineScreen<BetterAutoSmelterMenu> {
     /** Vanilla's furnace background: only its empty arrow is used. */
@@ -33,13 +37,27 @@ public class BetterAutoSmelterScreen extends AutoMachineScreen<BetterAutoSmelter
     public static final int ARROW_HEIGHT = 17;
     private static final int WORKSTATION_X = ARROW_X + (ARROW_WIDTH - 16) / 2;
     private static final int WORKSTATION_Y = 54;
-    private static final int GAUGE_X = 34;
+    /** Centered below the first column of slots (the inventory's), well clear of the machine's own slots. */
+    private static final int GAUGE_X = 11;
     private static final int GAUGE_Y = 17;
     private static final int GAUGE_WIDTH = 10;
     private static final int GAUGE_HEIGHT = 52;
+    /** Vanilla's slot highlight. */
+    private static final int HOVER = 0x80FFFFFF;
 
     public BetterAutoSmelterScreen(BetterAutoSmelterMenu menu, Inventory playerInventory, Component title) {
         super(menu, playerInventory, title);
+    }
+
+    /** Right of the result's slot. */
+    @Override
+    protected int recipeButtonX() {
+        return BetterAutoSmelterMenu.RESULT_X + 19;
+    }
+
+    @Override
+    protected int recipeButtonY() {
+        return BetterAutoSmelterMenu.RESULT_Y;
     }
 
     @Override
@@ -61,6 +79,12 @@ public class BetterAutoSmelterScreen extends AutoMachineScreen<BetterAutoSmelter
         BetterAutoSmelterBlockEntity.Kind kind = menu.getKind();
         if (kind != null) {
             graphics.renderFakeItem(kind.getWorkstation(), leftPos + WORKSTATION_X, topPos + WORKSTATION_Y);
+            if (canChangeKind() && !isChoicePopupOpen() && isOverWorkstation(mouseX, mouseY)) {
+                // Over the item, like a slot's highlight.
+                int x = leftPos + WORKSTATION_X;
+                int y = topPos + WORKSTATION_Y;
+                graphics.fillGradient(RenderType.guiOverlay(), x, y, x + 16, y + 16, HOVER, HOVER, 0);
+            }
         }
     }
 
@@ -90,7 +114,56 @@ public class BetterAutoSmelterScreen extends AutoMachineScreen<BetterAutoSmelter
         }
     }
 
-    private boolean isInside(int mouseX, int mouseY, int x, int y, int width, int height) {
+    // ---------------------------------------------------------------------------------------------------------------
+    // Other kinds of recipe
+    // ---------------------------------------------------------------------------------------------------------------
+
+    /** The kinds of recipe that can cook the input, in the order they are tried. */
+    private List<BetterAutoSmelterBlockEntity.Kind> kinds() {
+        List<BetterAutoSmelterBlockEntity.Kind> kinds = new ArrayList<>();
+        for (RecipeChoices.Choice choice : menu.getRecipeChoices().choices()) {
+            BetterAutoSmelterBlockEntity.Kind kind = BetterAutoSmelterBlockEntity.Kind.byId(choice.group());
+            if (kind != null && !kinds.contains(kind)) {
+                kinds.add(kind);
+            }
+        }
+        return kinds;
+    }
+
+    private boolean canChangeKind() {
+        return menu.getKind() != null && kinds().size() > 1;
+    }
+
+    private boolean isOverWorkstation(double mouseX, double mouseY) {
+        return isInside(mouseX, mouseY, WORKSTATION_X, WORKSTATION_Y, 16, 16);
+    }
+
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (!isChoicePopupOpen() && menu.getCarried().isEmpty() && canChangeKind() && isOverWorkstation(mouseX, mouseY)) {
+            openKindPopup();
+            return consumeClick();
+        }
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    /** A panel of the blocks that could cook the input instead; picking one uses its first recipe. */
+    private void openKindPopup() {
+        List<RecipeChoices.Choice> choices = menu.getRecipeChoices().choices();
+        List<ChoicePopup.Option> options = new ArrayList<>();
+        for (BetterAutoSmelterBlockEntity.Kind kind : kinds()) {
+            int first = 0;
+            while (choices.get(first).group() != BetterAutoSmelterBlockEntity.Kind.toId(kind)) {
+                first++;
+            }
+            int index = first;
+            options.add(new ChoicePopup.Option(kind.getWorkstation(), kind == menu.getKind(),
+                    List.of(text().get("recipe_kind." + kind.getSerializedName())), () -> chooseRecipe(index)));
+        }
+        openChoicePopup(options, leftPos + WORKSTATION_X, topPos + WORKSTATION_Y, 16, 16);
+    }
+
+    private boolean isInside(double mouseX, double mouseY, int x, int y, int width, int height) {
         return FuelGauge.isMouseOver(leftPos + x, topPos + y, width, height, mouseX, mouseY);
     }
 
@@ -113,8 +186,13 @@ public class BetterAutoSmelterScreen extends AutoMachineScreen<BetterAutoSmelter
             return List.of();
         }
         int cost = menu.getFuelCost();
-        return List.of(text().get("recipe_kind." + kind.getSerializedName()),
-                (cost == 0 ? text().get("fuel.not_needed") : text().get("fuel.cost", cost)).withStyle(ChatFormatting.GRAY));
+        List<Component> lines = new ArrayList<>();
+        lines.add(text().get("recipe_kind." + kind.getSerializedName()));
+        lines.add((cost == 0 ? text().get("fuel.not_needed") : text().get("fuel.cost", cost)).withStyle(ChatFormatting.GRAY));
+        if (canChangeKind()) {
+            lines.add(text().get("recipe_kind.change").withStyle(ChatFormatting.DARK_GRAY));
+        }
+        return lines;
     }
 
     @Override

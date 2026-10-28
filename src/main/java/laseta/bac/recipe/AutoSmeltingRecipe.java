@@ -1,18 +1,26 @@
 package laseta.bac.recipe;
 
+import java.util.Optional;
+
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import io.netty.buffer.ByteBuf;
 
+import laseta.bac.material.SharedMaterial;
 import laseta.bac.registry.ModItems;
 import laseta.bac.registry.ModRecipeSerializers;
 import laseta.bac.registry.ModRecipeTypes;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.NonNullList;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.TagKey;
 import net.minecraft.util.ExtraCodecs;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.Recipe;
@@ -25,7 +33,8 @@ import org.jetbrains.annotations.NotNull;
 
 /**
  * A recipe only the Better Auto Smelter makes: like a furnace recipe, but it can take several items at once. Its input
- * slot holds one of the item as usual, and each operation pulls the ingredient's count of it. Data packs add them like
+ * slot must hold at least the ingredient's count of the item (so one iron ingot is still just an iron ingot), and each
+ * operation pulls that count. Data packs add them like
  * any recipe, e.g. {@code data/<namespace>/recipe/<name>.json}:
  *
  * <pre>{@code
@@ -39,6 +48,10 @@ import org.jetbrains.annotations.NotNull;
  *
  * <p>{@code "count"} defaults to 1, {@code "fuel"} to a furnace's {@value #DEFAULT_FUEL} burn ticks (0 for none). The
  * smelter tries these before any vanilla cooking recipe, since they could never be reached otherwise.</p>
+ *
+ * <p>An optional {@code "result_tag"} (e.g. {@code "c:ingots/steel"}) is the result's common tag: while another mod has
+ * an item in it, the recipe makes that item instead (same count), so a material many mods add is only made as one of
+ * them (see {@link SharedMaterial}).</p>
  */
 public class AutoSmeltingRecipe implements Recipe<SingleRecipeInput> {
     /** What a furnace burns while smelting one item. */
@@ -47,12 +60,15 @@ public class AutoSmeltingRecipe implements Recipe<SingleRecipeInput> {
     private final String group;
     private final SizedIngredient ingredient;
     private final ItemStack result;
+    private final Optional<TagKey<Item>> resultTag;
     private final int fuel;
 
-    public AutoSmeltingRecipe(String group, SizedIngredient ingredient, ItemStack result, int fuel) {
+    public AutoSmeltingRecipe(String group, SizedIngredient ingredient, ItemStack result, Optional<TagKey<Item>> resultTag,
+                              int fuel) {
         this.group = group;
         this.ingredient = ingredient;
         this.result = result;
+        this.resultTag = resultTag;
         this.fuel = fuel;
     }
 
@@ -65,15 +81,15 @@ public class AutoSmeltingRecipe implements Recipe<SingleRecipeInput> {
         return fuel;
     }
 
-    /** Only the item matters: the smelter pulls the ingredient's count of it. */
+    /** The item, at least the ingredient's count of it. */
     @Override
     public boolean matches(@NotNull SingleRecipeInput input, @NotNull Level level) {
-        return ingredient.ingredient().test(input.item());
+        return ingredient.test(input.item());
     }
 
     @Override
     public @NotNull ItemStack assemble(@NotNull SingleRecipeInput input, HolderLookup.@NotNull Provider registries) {
-        return result.copy();
+        return getResultItem(registries).copy();
     }
 
     @Override
@@ -81,9 +97,12 @@ public class AutoSmeltingRecipe implements Recipe<SingleRecipeInput> {
         return true;
     }
 
+    /** The result, or another mod's item in the result tag (looked up each time: tags change with data packs). */
     @Override
     public @NotNull ItemStack getResultItem(HolderLookup.@NotNull Provider registries) {
-        return result;
+        return resultTag.flatMap(tag -> SharedMaterial.otherModItem(registries, tag))
+                .map(item -> new ItemStack(item, result.getCount()))
+                .orElse(result);
     }
 
     @Override
@@ -127,12 +146,16 @@ public class AutoSmeltingRecipe implements Recipe<SingleRecipeInput> {
                 Codec.STRING.optionalFieldOf("group", "").forGetter(recipe -> recipe.group),
                 SizedIngredient.FLAT_CODEC.fieldOf("ingredient").forGetter(recipe -> recipe.ingredient),
                 ItemStack.STRICT_CODEC.fieldOf("result").forGetter(recipe -> recipe.result),
+                TagKey.codec(Registries.ITEM).optionalFieldOf("result_tag").forGetter(recipe -> recipe.resultTag),
                 ExtraCodecs.NON_NEGATIVE_INT.optionalFieldOf("fuel", DEFAULT_FUEL).forGetter(recipe -> recipe.fuel)
         ).apply(instance, AutoSmeltingRecipe::new));
+        private static final StreamCodec<ByteBuf, TagKey<Item>> ITEM_TAG_STREAM_CODEC =
+                ResourceLocation.STREAM_CODEC.map(location -> TagKey.create(Registries.ITEM, location), TagKey::location);
         private static final StreamCodec<RegistryFriendlyByteBuf, AutoSmeltingRecipe> STREAM_CODEC = StreamCodec.composite(
                 ByteBufCodecs.STRING_UTF8, recipe -> recipe.group,
                 SizedIngredient.STREAM_CODEC, recipe -> recipe.ingredient,
                 ItemStack.STREAM_CODEC, recipe -> recipe.result,
+                ByteBufCodecs.optional(ITEM_TAG_STREAM_CODEC), recipe -> recipe.resultTag,
                 ByteBufCodecs.VAR_INT, recipe -> recipe.fuel,
                 AutoSmeltingRecipe::new);
 

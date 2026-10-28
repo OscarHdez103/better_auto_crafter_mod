@@ -14,10 +14,4 @@ public class CraftingComponentItem extends Item {
     public CraftingComponentItem(Properties properties) {
         super(properties);
     }
-
-    @Override
-    public void appendHoverText(@NotNull ItemStack stack, @NotNull TooltipContext context, @NotNull List<Component> tooltip,
-                                @NotNull TooltipFlag flag) {
-        tooltip.add(Component.translatable(getDescriptionId() + ".desc").withStyle(ChatFormatting.GRAY));
-    }
 }

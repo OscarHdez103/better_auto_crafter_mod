@@ -1,0 +1,20 @@
+{
+  "neoforge:conditions": [
+    {
+      "type": "better_auto_crafter:no_other_mod_in_tag",
+      "tag": "c:ingots/steel"
+    }
+  ],
+  "type": "minecraft:crafting_shapeless",
+  "category": "misc",
+  "group": "steel_ingot",
+  "ingredients": [
+    {
+      "tag": "c:storage_blocks/steel"
+    }
+  ],
+  "result": {
+    "id": "better_auto_crafter:steel_ingot",
+    "count": 9
+  }
+}

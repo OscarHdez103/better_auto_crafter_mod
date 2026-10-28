@@ -13,6 +13,9 @@ import net.minecraft.world.item.ItemStack;
  *
  * <p>Items already in the grid are returned to the inventory, but are also the first choice when filling,
  * so re-filling the same recipe doesn't shuffle items around.</p>
+ *
+ * <p>A slot gets as many items as its candidates' count (auto crafting recipes take several of an item, and only match
+ * when the grid holds that many), all of the same item, or none.</p>
  */
 public final class GridFillPlanner {
     /** Most alternatives considered per grid slot (e.g. all items of a tag). Also caps the network packet size. */
@@ -42,7 +45,8 @@ public final class GridFillPlanner {
     }
 
     /**
-     * @param wanted       per grid slot, the items that are accepted there (empty list = slot stays empty)
+     * @param wanted       per grid slot, the items that are accepted there (empty list = slot stays empty), with the
+     *                     count one craft takes
      * @param currentGrid  current grid contents
      * @param inventory    player's main inventory (36 slots, hotbar first, like {@code Inventory.items})
      * @param fillMaximum  fill every slot as far as possible instead of one craft's worth (shift-click)
@@ -60,6 +64,7 @@ public final class GridFillPlanner {
         ItemStack[] grid = new ItemStack[gridSize];
         Arrays.fill(grid, ItemStack.EMPTY);
         boolean[] missing = new boolean[gridSize];
+        int[] amounts = new int[gridSize];
 
         int requested = 0;
         int placed = 0;
@@ -69,7 +74,8 @@ public final class GridFillPlanner {
                 continue;
             }
             requested++;
-            ItemStack taken = takeMatching(candidates, pool, inv);
+            amounts[i] = amount(candidates);
+            ItemStack taken = takeMatching(candidates, amounts[i], pool, inv);
             if (taken.isEmpty()) {
                 missing[i] = true;
             } else {
@@ -79,7 +85,7 @@ public final class GridFillPlanner {
         }
 
         if (fillMaximum && placed > 0) {
-            fillMaximum(grid, pool, inv);
+            fillMaximum(grid, amounts, pool, inv);
         }
 
         boolean fits = true;
@@ -92,23 +98,31 @@ public final class GridFillPlanner {
         return new Plan(List.of(grid), inv, missing, placed, requested, fits);
     }
 
-    /** Adds one more item to every filled slot per round, while every slot can still get one. */
-    private static void fillMaximum(ItemStack[] grid, List<ItemStack> pool, List<ItemStack> inv) {
+    /** How many items one craft takes in a slot: its candidates' count, within a stack. */
+    private static int amount(List<ItemStack> candidates) {
+        ItemStack first = candidates.getFirst();
+        return Math.clamp(first.getCount(), 1, first.getMaxStackSize());
+    }
+
+    /** Adds one more craft's worth to every filled slot per round, while every slot can still get it. */
+    private static void fillMaximum(ItemStack[] grid, int[] amounts, List<ItemStack> pool, List<ItemStack> inv) {
         while (true) {
             ItemStack[] gridBefore = copyAll(Arrays.asList(grid)).toArray(ItemStack[]::new);
             List<ItemStack> poolBefore = copyAll(pool);
             List<ItemStack> invBefore = copyAll(inv);
 
             boolean roundComplete = true;
-            for (ItemStack stack : grid) {
+            for (int i = 0; i < grid.length; i++) {
+                ItemStack stack = grid[i];
                 if (stack.isEmpty()) {
                     continue;
                 }
-                if (stack.getCount() >= stack.getMaxStackSize() || takeMatching(List.of(stack), pool, inv).isEmpty()) {
+                if (stack.getCount() + amounts[i] > stack.getMaxStackSize()
+                        || takeMatching(List.of(stack), amounts[i], pool, inv).isEmpty()) {
                     roundComplete = false;
                     break;
                 }
-                stack.grow(1);
+                stack.grow(amounts[i]);
             }
 
             if (!roundComplete) {
@@ -119,6 +133,42 @@ public final class GridFillPlanner {
                 return;
             }
         }
+    }
+
+    /**
+     * Removes and returns {@code amount} items of the same kind matching any candidate, preferring the grid, then the
+     * main inventory, then the hotbar. Takes nothing if there aren't that many.
+     */
+    private static ItemStack takeMatching(List<ItemStack> candidates, int amount, List<ItemStack> pool, List<ItemStack> inv) {
+        List<ItemStack> poolBefore = copyAll(pool);
+        List<ItemStack> invBefore = copyAll(inv);
+        ItemStack taken = takeMatching(candidates, pool, inv);
+        while (!taken.isEmpty() && taken.getCount() < amount) {
+            ItemStack more = takeSame(taken, pool, inv);
+            if (more.isEmpty()) {
+                restore(pool, poolBefore);
+                restore(inv, invBefore);
+                return ItemStack.EMPTY;
+            }
+            taken.grow(1);
+        }
+        return taken;
+    }
+
+    /** Removes and returns one item stacking with {@code stack}, in the same order as {@link #takeMatching}. */
+    private static ItemStack takeSame(ItemStack stack, List<ItemStack> pool, List<ItemStack> inv) {
+        for (ItemStack candidate : pool) {
+            if (ItemStack.isSameItemSameComponents(candidate, stack) && !candidate.isEmpty()) {
+                return candidate.split(1);
+            }
+        }
+        for (int index : inventorySearchOrder(inv.size())) {
+            ItemStack candidate = inv.get(index);
+            if (!candidate.isEmpty() && ItemStack.isSameItemSameComponents(candidate, stack)) {
+                return candidate.split(1);
+            }
+        }
+        return ItemStack.EMPTY;
     }
 
     /** Removes and returns one item matching any candidate, preferring the grid, then the main inventory, then the hotbar. */

@@ -2,7 +2,9 @@ package laseta.bac.client.screen;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
+import laseta.bac.client.screen.widget.ChoicePopup;
 import laseta.bac.client.screen.widget.MachineSettingsTab;
 import laseta.bac.client.screen.widget.MachineStatusIcon;
 import laseta.bac.client.screen.widget.MachineTab;
@@ -16,12 +18,15 @@ import laseta.bac.machine.AutoMachineBlock;
 import laseta.bac.machine.AutoMachineMenu;
 import laseta.bac.machine.MachineLayout;
 import laseta.bac.machine.MachineOption;
+import laseta.bac.machine.RecipeChoices;
 import laseta.bac.menu.slot.MachineUpgradeSlot;
 import laseta.bac.menu.slot.UpgradeSlot;
+import laseta.bac.network.SetUpgradeSettingPayload;
 import laseta.bac.upgrade.UpgradeLayout;
 import laseta.bac.upgrade.UpgradeStatus;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.core.Direction;
@@ -30,6 +35,7 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
+import net.neoforged.neoforge.network.PacketDistributor;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -39,8 +45,19 @@ import org.jetbrains.annotations.Nullable;
  * and, for machines with features of their own, the machine tab. Subclasses
  * can draw their own background ({@link #renderMachineBackground}), give their options icons
  * ({@link #renderOptionIcon}) or add tabs ({@link #createRightTabs}, {@link #createLeftTabs}).
+ *
+ * <p>When the template makes several recipes, a small button next to the result ({@link #recipeButtonX()}) opens a
+ * panel of their results to pick the one the machine makes.</p>
  */
 public abstract class AutoMachineScreen<M extends AutoMachineMenu> extends AbstractContainerScreen<M> {
+    /**
+     * Somewhere on screen an item dragged from JEI / EMI can be dropped, and what dropping it there does.
+     *
+     * @param area on screen
+     */
+    public record GhostTarget(Rect2i area, Consumer<ItemStack> drop) {
+    }
+
     // Vanilla GUI colours
     private static final int PANEL_OUTLINE = 0xFF000000;
     private static final int PANEL_FILL = 0xFFC6C6C6;
@@ -66,6 +83,11 @@ public abstract class AutoMachineScreen<M extends AutoMachineMenu> extends Abstr
     private MachineText text;
     /** Set when a tab consumed a mouse press, so the matching release isn't handled as a slot click. */
     private boolean ignoreNextRelease;
+    /** The panel of recipes (or anything else) to pick from, when open. */
+    private final ChoicePopup choicePopup = new ChoicePopup();
+    /** The choices the open panel was made from: it closes when they change. */
+    @Nullable
+    private RecipeChoices popupChoices;
 
     protected AutoMachineScreen(M menu, Inventory playerInventory, Component title) {
         super(menu, playerInventory, title);
@@ -145,6 +167,74 @@ public abstract class AutoMachineScreen<M extends AutoMachineMenu> extends Abstr
         graphics.pose().popPose();
     }
 
+    /**
+     * Left edge of the button offering the template's other recipes, relative to the GUI (next to the result), or -1
+     * for machines without recipes. It only shows when there are others.
+     */
+    protected int recipeButtonX() {
+        return -1;
+    }
+
+    protected int recipeButtonY() {
+        return 0;
+    }
+
+    /** Indices of the recipes the button offers: those of the same group as the chosen one (all for most machines). */
+    private List<Integer> buttonChoices() {
+        RecipeChoices choices = menu.getRecipeChoices();
+        RecipeChoices.Choice chosen = choices.chosenChoice();
+        List<Integer> indices = new ArrayList<>();
+        for (int i = 0; chosen != null && i < choices.choices().size(); i++) {
+            if (choices.choices().get(i).group() == chosen.group()) {
+                indices.add(i);
+            }
+        }
+        return indices;
+    }
+
+    private boolean showsRecipeButton() {
+        return recipeButtonX() >= 0 && buttonChoices().size() > 1;
+    }
+
+    private boolean isOverRecipeButton(double mouseX, double mouseY) {
+        return showsRecipeButton() && ChoicePopup.isMouseOverButton(leftPos + recipeButtonX(), topPos + recipeButtonY(), mouseX, mouseY);
+    }
+
+    /** Opens the panel of the button's recipes, each shown as its result. */
+    private void openRecipePopup() {
+        RecipeChoices choices = menu.getRecipeChoices();
+        List<ChoicePopup.Option> options = new ArrayList<>();
+        for (int index : buttonChoices()) {
+            ItemStack result = choices.choices().get(index).result();
+            options.add(new ChoicePopup.Option(result, index == choices.chosen(), Screen.getTooltipFromItem(minecraft, result),
+                    () -> chooseRecipe(index)));
+        }
+        openChoicePopup(options, leftPos + recipeButtonX(), topPos + recipeButtonY(), ChoicePopup.BUTTON_SIZE, ChoicePopup.BUTTON_SIZE);
+    }
+
+    /** Opens a panel of options to pick from, above the given area of the screen; it closes when the choices change. */
+    protected void openChoicePopup(List<ChoicePopup.Option> options, int x, int y, int areaWidth, int areaHeight) {
+        popupChoices = menu.getRecipeChoices();
+        choicePopup.open(options, x, y, areaWidth, areaHeight, width);
+    }
+
+    protected boolean isChoicePopupOpen() {
+        return choicePopup.isOpen();
+    }
+
+    /** Makes the machine use the recipe at {@code index} of the menu's recipe choices. */
+    protected void chooseRecipe(int index) {
+        if (minecraft != null && minecraft.gameMode != null) {
+            minecraft.gameMode.handleInventoryButtonClick(menu.containerId, menu.chooseRecipeButton(index));
+        }
+    }
+
+    /** For a mouse press the screen handled itself: its release mustn't be handled as a slot click either. */
+    protected boolean consumeClick() {
+        ignoreNextRelease = true;
+        return true;
+    }
+
     /** Draws the 16x16 icon of a value of one of the machine's options, in the machine tab. Draws nothing by default. */
     protected void renderOptionIcon(GuiGraphics graphics, MachineOption<?> option, Enum<?> value, int x, int y) {
     }
@@ -169,14 +259,42 @@ public abstract class AutoMachineScreen<M extends AutoMachineMenu> extends Abstr
         return areas;
     }
 
+    /**
+     * Where {@code stack}, dragged from JEI / EMI, can be dropped: the setting boxes of the machine tab's upgrades that
+     * may be set to it (only while the tab is open). Dropping it sets the upgrade on the server; nothing is given.
+     */
+    public List<GhostTarget> getGhostTargets(ItemStack stack) {
+        if (machineTab == null) {
+            return List.of();
+        }
+        List<GhostTarget> targets = new ArrayList<>();
+        machineTab.getSettingTargets(stack).forEach((slotIndex, rect) -> targets.add(new GhostTarget(
+                new Rect2i(rect.left(), rect.top(), rect.width(), rect.height()),
+                dropped -> PacketDistributor.sendToServer(
+                        new SetUpgradeSettingPayload(menu.containerId, slotIndex, dropped.copyWithCount(1))))));
+        return targets;
+    }
+
     @Override
     public void render(@NotNull GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         // The upgrade slots live in the upgrades tab: only show (and allow clicking) them while it is fully open.
         menu.setUpgradeSlotsVisible(upgradesTab.isFullyOpen());
         // Same for the machine's own upgrade slots, which are only where the layout says once the upgrades tab is closed.
         menu.setMachineUpgradeSlotsVisible(machineTab != null && machineTab.isFullyOpen() && upgradesTab.isFullyClosed());
+        if (choicePopup.isOpen() && popupChoices != menu.getRecipeChoices()) {
+            choicePopup.close();
+        }
         super.render(graphics, mouseX, mouseY, partialTick);
+        choicePopup.render(graphics, mouseX, mouseY);
+        if (choicePopup.isMouseOver(mouseX, mouseY)) {
+            choicePopup.renderTooltip(graphics, font, mouseX, mouseY);
+            return;
+        }
         if (rightTabs.renderTooltip(graphics, font, mouseX, mouseY) || leftTabs.renderTooltip(graphics, font, mouseX, mouseY)) {
+            return;
+        }
+        if (menu.getCarried().isEmpty() && !choicePopup.isOpen() && isOverRecipeButton(mouseX, mouseY)) {
+            graphics.renderTooltip(font, Component.translatable("gui.better_auto_crafter.recipe_choice"), mouseX, mouseY);
             return;
         }
         if (menu.getCarried().isEmpty()
@@ -191,6 +309,10 @@ public abstract class AutoMachineScreen<M extends AutoMachineMenu> extends Abstr
     protected void renderBg(@NotNull GuiGraphics graphics, float partialTick, int mouseX, int mouseY) {
         renderMachineBackground(graphics);
         statusIcon.render(graphics, leftPos + statusIconX(), topPos + statusIconY(), partialTick);
+        if (showsRecipeButton()) {
+            ChoicePopup.renderButton(graphics, leftPos + recipeButtonX(), topPos + recipeButtonY(),
+                    !choicePopup.isOpen() && isOverRecipeButton(mouseX, mouseY));
+        }
         rightTabs.render(graphics, font, mouseX, mouseY);
         leftTabs.render(graphics, font, mouseX, mouseY);
     }
@@ -247,6 +369,13 @@ public abstract class AutoMachineScreen<M extends AutoMachineMenu> extends Abstr
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (choicePopup.mouseClicked(mouseX, mouseY)) {
+            return consumeClick();
+        }
+        if (menu.getCarried().isEmpty() && isOverRecipeButton(mouseX, mouseY)) {
+            openRecipePopup();
+            return consumeClick();
+        }
         if (rightTabs.mouseClicked(mouseX, mouseY, button) || leftTabs.mouseClicked(mouseX, mouseY, button)) {
             ignoreNextRelease = true;
             return true;

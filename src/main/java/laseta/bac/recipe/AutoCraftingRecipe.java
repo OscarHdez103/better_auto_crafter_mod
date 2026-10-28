@@ -32,7 +32,8 @@ import org.jetbrains.annotations.Nullable;
 
 /**
  * A recipe only the Better Auto Crafter makes. Shaped like a crafting recipe (up to 3x3, also mirrored), but every key
- * can ask for several items: the grid holds one of the item as usual, and each craft pulls the key's count of it.
+ * can ask for several items: the grid slot must hold at least the key's count of the item, and each craft pulls that
+ * count. Until every slot holds enough, the grid is only whatever crafting recipe it is.
  * Data packs add them like any recipe, e.g. {@code data/<namespace>/recipe/<name>.json}:
  *
  * <pre>{@code
@@ -78,9 +79,14 @@ public class AutoCraftingRecipe implements Recipe<CraftingInput> {
         return pattern.cells();
     }
 
+    /** Whether any key asks for more than one item. */
+    public boolean needsSeveral() {
+        return pattern.cells().stream().flatMap(Optional::stream).anyMatch(cell -> cell.count() > 1);
+    }
+
     /**
      * How many items each slot of {@code input} takes per craft, in the input's slot order (0 for empty slots), or null
-     * if the recipe doesn't match it. Counts are ignored: one item in a slot is enough to match.
+     * if the recipe doesn't match it. Every slot must hold at least its key's count.
      */
     public int @Nullable [] amounts(CraftingInput input) {
         if (input.width() != pattern.width() || input.height() != pattern.height()) {
@@ -101,7 +107,7 @@ public class AutoCraftingRecipe implements Recipe<CraftingInput> {
                     if (!stack.isEmpty()) {
                         return null;
                     }
-                } else if (cell.get().ingredient().test(stack)) {
+                } else if (cell.get().test(stack)) {
                     amounts[x + y * width] = cell.get().count();
                 } else {
                     return null;

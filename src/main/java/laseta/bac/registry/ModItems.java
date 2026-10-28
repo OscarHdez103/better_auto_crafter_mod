@@ -6,7 +6,7 @@ import java.util.List;
 
 import laseta.bac.BetterAutoCrafter;
 import laseta.bac.compat.StorageLinkIntegrations;
-import laseta.bac.item.CoProcessorUpgradeItem;
+import laseta.bac.item.CoprocessingUpgradeItem;
 import laseta.bac.item.CraftingComponentItem;
 import laseta.bac.item.FuelFilterUpgradeItem;
 import laseta.bac.item.InfiniteWaterUpgradeItem;
@@ -18,6 +18,7 @@ import laseta.bac.item.StorageLinkUpgradeItem;
 import laseta.bac.item.TranslocationUpgradeItem;
 import laseta.bac.stock.InventoryStockReader;
 import laseta.bac.upgrade.TranslocationMode;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Rarity;
@@ -37,6 +38,17 @@ public final class ModItems {
     /** Only made by the Better Auto Crafter (an auto crafting recipe); goes into the recipes of the mod's machines. */
     public static final DeferredItem<CraftingComponentItem> BETTER_MATERIAL = ITEMS.registerItem("better_material",
             CraftingComponentItem::new, new Item.Properties());
+    /** Better Material infused with steel: only brewed in the Better Auto Brewer (an auto brewing recipe). */
+    public static final DeferredItem<CraftingComponentItem> INFUSED_BETTER_MATERIAL = ITEMS.registerItem("infused_better_material",
+            CraftingComponentItem::new, new Item.Properties());
+
+    /**
+     * Steel, made in the Better Auto Smelter. Only used while no other mod adds steel: see
+     * {@link laseta.bac.material.Materials#STEEL}.
+     */
+    public static final DeferredItem<Item> STEEL_INGOT = ITEMS.registerSimpleItem("steel_ingot");
+    public static final DeferredItem<Item> STEEL_NUGGET = ITEMS.registerSimpleItem("steel_nugget");
+    public static final DeferredItem<BlockItem> STEEL_BLOCK = ITEMS.registerSimpleBlockItem(ModBlocks.STEEL_BLOCK);
 
     public static final DeferredItem<TranslocationUpgradeItem> TRANSLOCATION_UPGRADE_PULL =
             registerTranslocationUpgrade("translocation_upgrade_pull", TranslocationMode.PULL, false);
@@ -72,8 +84,8 @@ public final class ModItems {
     /** Make every operation shorter, and repeat it several times per run. */
     public static final DeferredItem<SpeedUpgradeItem> SPEED_UPGRADE = ITEMS.registerItem("speed_upgrade",
             SpeedUpgradeItem::new, new Item.Properties().rarity(Rarity.UNCOMMON));
-    public static final DeferredItem<CoProcessorUpgradeItem> CO_PROCESSOR_UPGRADE = ITEMS.registerItem("co_processor_upgrade",
-            CoProcessorUpgradeItem::new, new Item.Properties().rarity(Rarity.RARE));
+    public static final DeferredItem<CoprocessingUpgradeItem> COPROCESSING_UPGRADE = ITEMS.registerItem("coprocessing_upgrade",
+            CoprocessingUpgradeItem::new, new Item.Properties().rarity(Rarity.RARE));
 
     /** Upgrades only some machines take, in their own tab: the brewer's starter slot and the smelter's fuel filter slot. */
     public static final DeferredItem<InfiniteWaterUpgradeItem> INFINITE_WATER_UPGRADE = ITEMS.registerItem("infinite_water_upgrade",
@@ -118,7 +130,13 @@ public final class ModItems {
                 new Item.Properties().rarity(rarity));
     }
 
+    private static ResourceLocation id(String path) {
+        return ResourceLocation.fromNamespaceAndPath(BetterAutoCrafter.MODID, path);
+    }
+
     public static void register(IEventBus modEventBus) {
+        // Renamed items: worlds saved with the old id load them as the new one.
+        ITEMS.addAlias(id("co_processor_upgrade"), COPROCESSING_UPGRADE.getId());
         ITEMS.register(modEventBus);
     }
 }

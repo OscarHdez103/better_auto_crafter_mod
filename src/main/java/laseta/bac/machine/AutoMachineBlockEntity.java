@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Predicate;
 
-import laseta.bac.item.CoProcessorUpgradeItem;
+import laseta.bac.item.CoprocessingUpgradeItem;
 import laseta.bac.item.MultiTranslocationUpgradeItem;
 import laseta.bac.item.SpeedUpgradeItem;
 import laseta.bac.item.StockingUpgradeItem;
@@ -28,12 +28,17 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Containers;
 import net.minecraft.world.MenuProvider;
 import net.minecraft.world.inventory.ContainerData;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.crafting.Recipe;
+import net.minecraft.world.item.crafting.RecipeHolder;
+import net.minecraft.world.item.crafting.RecipeInput;
+import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -163,6 +168,56 @@ public abstract class AutoMachineBlockEntity extends BlockEntity implements Menu
 
     /** Called whenever the machine's own upgrade slots change, e.g. to forget something computed from them. */
     protected void onMachineUpgradesChanged() {
+    }
+
+    /**
+     * Server only: the recipes the template could make and which one the machine makes, for the GUI to offer the others
+     * when there are several. None by default (machines without recipes).
+     */
+    public RecipeChoices getRecipeChoices() {
+        return RecipeChoices.NONE;
+    }
+
+    /**
+     * Server only: makes the machine use the recipe at {@code index} of {@link #getRecipeChoices()} from now on.
+     *
+     * @return false if there is no such choice
+     */
+    public boolean chooseRecipe(int index) {
+        return false;
+    }
+
+    /**
+     * Server only: every recipe of {@code type} matching {@code input}, the one the recipe manager picks first (what a
+     * vanilla block would make) and then the others.
+     */
+    protected <I extends RecipeInput, R extends Recipe<I>> List<RecipeHolder<R>> matchingRecipes(RecipeType<R> type, I input) {
+        if (level == null) {
+            return List.of();
+        }
+        List<RecipeHolder<R>> matching = new ArrayList<>(level.getRecipeManager().getRecipesFor(type, input, level));
+        level.getRecipeManager().getRecipeFor(type, input, level).ifPresent(first -> {
+            matching.remove(first);
+            matching.addFirst(first);
+        });
+        return matching;
+    }
+
+    /**
+     * Server only: makes the machine use the recipe with this id, if it is one of {@link #getRecipeChoices()} (e.g. the
+     * one filled in from JEI / EMI).
+     *
+     * @return false if it isn't
+     */
+    public boolean chooseRecipe(ResourceLocation id) {
+        return false;
+    }
+
+    /** Call when the chosen recipe changed: it is worked out again like after a template change. */
+    protected void onRecipeChosen() {
+        status.clearLastProblem();
+        onTemplateChanged();
+        setChanged();
     }
 
     /** How many items a template slot holds. Machines whose template only says which items it takes can make it 1. */
@@ -443,7 +498,7 @@ public abstract class AutoMachineBlockEntity extends BlockEntity implements Menu
     }
 
     /**
-     * Resolves the faces and upgrades and lets the machine {@link #operate} with them, once plus once per co-processor
+     * Resolves the faces and upgrades and lets the machine {@link #operate} with them, once plus once per coprocessing
      * upgrade. Those repeats stop at the first one that fails, so a machine with nothing to do costs one operation.
      *
      * @return why nothing happened, or null if at least one operation did
@@ -468,7 +523,7 @@ public abstract class AutoMachineBlockEntity extends BlockEntity implements Menu
         if (storageLink.status().isProblem()) {
             return MachineProblem.BROKEN_UPGRADE;
         }
-        int operations = CoProcessorUpgradeItem.getOperations(upgrades.get(UpgradeSlotType.CO_PROCESSOR));
+        int operations = CoprocessingUpgradeItem.getOperations(upgrades.get(UpgradeSlotType.COPROCESSING));
         int stockLimit = getStockLimit();
         for (int i = 0; i < operations; i++) {
             // A new transfer for each one: it orders the faces by the round robin, which moves on after each.

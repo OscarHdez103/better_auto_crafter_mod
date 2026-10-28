@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "pattern": [
+    "IQI",
+    "QBQ",
+    "IQI"
+  ],
+  "key": {
+    "I": {
+      "item": "better_auto_crafter:infused_better_material"
+    },
+    "B": {
+      "item": "better_auto_crafter:better_material"
+    },
+    "Q": {
+      "item": "minecraft:quartz"
+    }
+  },
+  "result": {
+    "id": "better_auto_crafter:coprocessing_upgrade",
+    "count": 1
+  }
+}

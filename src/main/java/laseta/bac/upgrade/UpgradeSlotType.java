@@ -3,7 +3,7 @@ package laseta.bac.upgrade;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
-import laseta.bac.item.CoProcessorUpgradeItem;
+import laseta.bac.item.CoprocessingUpgradeItem;
 import laseta.bac.item.SpeedUpgradeItem;
 import laseta.bac.item.StockingUpgradeItem;
 import laseta.bac.item.StorageLinkUpgradeItem;
@@ -30,7 +30,7 @@ public enum UpgradeSlotType {
     STORAGE_LINK("storage_link", 1, 1, ModItems.STORAGE_LINK_UPGRADE, 1, stack -> stack.getItem() instanceof StorageLinkUpgradeItem),
     /** Its limit depends on the machine's base speed, see {@link SpeedUpgradeItem#getUsefulCount}. */
     SPEED("speed", 2, 0, ModItems.SPEED_UPGRADE, 64, stack -> stack.getItem() instanceof SpeedUpgradeItem),
-    CO_PROCESSOR("co_processor", 2, 1, ModItems.CO_PROCESSOR_UPGRADE, 64, stack -> stack.getItem() instanceof CoProcessorUpgradeItem);
+    COPROCESSING("coprocessing", 2, 1, ModItems.COPROCESSING_UPGRADE, 64, stack -> stack.getItem() instanceof CoprocessingUpgradeItem);
 
     public static final int COUNT = values().length;
     private static final UpgradeSlotType[] VALUES = values();

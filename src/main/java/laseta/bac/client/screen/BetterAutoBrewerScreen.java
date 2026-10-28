@@ -32,13 +32,25 @@ public class BetterAutoBrewerScreen extends AutoMachineScreen<BetterAutoBrewerMe
     public static final int ARROW_Y = BetterAutoBrewerMenu.PREVIEW_Y - 1;
     public static final int ARROW_WIDTH = 24;
     public static final int ARROW_HEIGHT = 17;
-    private static final int GAUGE_X = 34;
+    /** Centered below the first column of slots (the inventory's), well clear of the machine's own slots. */
+    private static final int GAUGE_X = 11;
     private static final int GAUGE_Y = 40;
     private static final int GAUGE_WIDTH = 10;
     private static final int GAUGE_HEIGHT = 29;
 
     public BetterAutoBrewerScreen(BetterAutoBrewerMenu menu, Inventory playerInventory, Component title) {
         super(menu, playerInventory, title);
+    }
+
+    /** Right of the result's slot. */
+    @Override
+    protected int recipeButtonX() {
+        return BetterAutoBrewerMenu.RESULT_X + 19;
+    }
+
+    @Override
+    protected int recipeButtonY() {
+        return BetterAutoBrewerMenu.PREVIEW_Y;
     }
 
     @Override

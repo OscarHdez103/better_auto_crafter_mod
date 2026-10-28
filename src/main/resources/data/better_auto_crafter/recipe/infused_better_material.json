@@ -1,0 +1,21 @@
+{
+  "type": "better_auto_crafter:auto_brewing",
+  "starter": {
+    "item": "better_auto_crafter:better_material"
+  },
+  "ingredients": [
+    { "tag": "c:ingots/steel" },
+    { "tag": "c:ingots/steel" },
+    { "tag": "c:ingots/steel" },
+    { "tag": "c:ingots/steel" },
+    { "tag": "c:ingots/steel" },
+    { "tag": "c:ingots/steel" },
+    { "tag": "c:ingots/steel" },
+    { "tag": "c:ingots/steel" },
+    { "tag": "c:ingots/steel" }
+  ],
+  "result": {
+    "id": "better_auto_crafter:infused_better_material"
+  },
+  "fuel": 9
+}

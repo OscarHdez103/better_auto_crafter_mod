@@ -53,11 +53,13 @@ import org.slf4j.Logger;
  * <ol>
  *     <li>Plan: find every template item with simulated extractions, counting what was already reserved per slot.</li>
  *     <li>Process the items that would actually be pulled (a craft checks its recipe still matches them).</li>
- *     <li>Check (simulated) that everything that comes out fits into the output inventories.</li>
+ *     <li>Check (simulated) that everything that comes out fits into the output inventories, all of it together: what
+ *     one stack is planned into isn't counted on for the next (see {@link InsertionPlanner}).</li>
  *     <li>Extract for real, verifying each stack. If an inventory doesn't deliver what it promised (e.g. two faces
  *     touching the same storage network), everything taken so far is put back and the operation is cancelled.</li>
- *     <li>Insert what comes out. Only if the outputs refuse what their simulation accepted does it go back to the input
- *     inventories, and only if those refuse it too is it dropped in the world, as a last resort.</li>
+ *     <li>Insert what comes out where it was planned. Only if an inventory refuses what its simulation accepted (it
+ *     changed in between, or simulates wrongly) does it go elsewhere in the outputs, then back to the input inventories,
+ *     and only if those refuse it too is it dropped in the world, as a last resort.</li>
  * </ol>
  */
 public final class ItemTransfer {
@@ -97,17 +99,33 @@ public final class ItemTransfer {
      * @param accepts   which items may be taken
      * @param value     what one item counts for (e.g. a fuel's burn time); items worth 0 or less are never taken
      * @param needed    how much value to take, at least (the last item may go over); 0 or less pulls nothing
-     * @param missing   why the operation can't happen when the sources don't hold enough
+     * @param wanted    how much value to take if the sources hold it (the last item may go over); never less than
+     *                  {@code needed}. A process reads what it got with {@link #planned}
+     * @param missing   why the operation can't happen when the sources don't hold {@code needed}
      * @param leftovers where what is left of the taken items goes (their crafting remainders, e.g. the bucket of a lava
      *                  bucket); without room there, the operation doesn't happen ({@link MachineProblem#LEFTOVER_FULL})
      * @param onTaken   called with the value taken, once the operation is certain to happen
      */
     public record Pull(List<IItemHandler> sources, Predicate<ItemStack> accepts, ToIntFunction<ItemStack> value, int needed,
-                       MachineProblem missing, List<IItemHandler> leftovers, IntConsumer onTaken) {
+                       int wanted, MachineProblem missing, List<IItemHandler> leftovers, IntConsumer onTaken) {
+        /** Takes {@code needed}'s worth: no more is wanted. */
+        public Pull(List<IItemHandler> sources, Predicate<ItemStack> accepts, ToIntFunction<ItemStack> value, int needed,
+                    MachineProblem missing, List<IItemHandler> leftovers, IntConsumer onTaken) {
+            this(sources, accepts, value, needed, needed, missing, leftovers, onTaken);
+        }
+
         /** {@code count} items exactly like {@code stack} (same data components). */
         public static Pull exactly(List<IItemHandler> sources, ItemStack stack, int count, MachineProblem missing) {
-            return new Pull(sources, candidate -> ItemStack.isSameItemSameComponents(candidate, stack), candidate -> 1, count,
-                    missing, List.of(), taken -> {
+            return upTo(sources, stack, count, count, missing);
+        }
+
+        /**
+         * As many items exactly like {@code stack} (same data components) as the sources hold, up to {@code wanted} and
+         * at least {@code needed}.
+         */
+        public static Pull upTo(List<IItemHandler> sources, ItemStack stack, int needed, int wanted, MachineProblem missing) {
+            return new Pull(sources, candidate -> ItemStack.isSameItemSameComponents(candidate, stack), candidate -> 1, needed,
+                    wanted, missing, List.of(), taken -> {
             });
         }
     }
@@ -122,8 +140,11 @@ public final class ItemTransfer {
     private record Extracted(IItemHandler handler, int slot, ItemStack stack) {
     }
 
-    /** A stack and the inventories it goes to, in the order they are tried. */
-    private record Delivery(ItemStack stack, List<IItemHandler> targets) {
+    /**
+     * A stack as the slots it was planned into, and the inventories it may go to (in the order they are tried) if one
+     * of those slots refuses it after all.
+     */
+    private record Delivery(List<InsertionPlanner.Insert> inserts, List<IItemHandler> targets) {
     }
 
     private final ServerLevel level;
@@ -135,6 +156,8 @@ public final class ItemTransfer {
     @Nullable
     private final StockReading.Counter linkedStock;
     private final List<Pull> pulls = new ArrayList<>();
+    /** The value planned for each pull in the operation being processed, see {@link #planned}. */
+    private final Map<Pull, Integer> plannedValues = new IdentityHashMap<>();
     /** Why the operation didn't happen, see {@link #fail}. */
     @Nullable
     private MachineProblem problem;
@@ -168,8 +191,18 @@ public final class ItemTransfer {
     }
 
     /**
+     * The value about to be taken for {@code pull} in the operation being processed: what a {@link Process} reads to
+     * know how much of {@link Pull#wanted} the sources actually hold (e.g. how many bottles a brew starts from). 0
+     * outside a process, or for a pull this transfer doesn't make.
+     */
+    public int planned(Pull pull) {
+        return plannedValues.getOrDefault(pull, 0);
+    }
+
+    /**
      * Pulls the items of {@code template} (one entry per template slot, with its count), turns them into the
      * {@code process}'s output and pushes that out. All or nothing: either everything happens or nothing is touched.
+     * An empty template takes nothing from the input faces, which is only an operation with {@link #pull pulls}.
      *
      * @return true if the operation happened
      */
@@ -206,7 +239,8 @@ public final class ItemTransfer {
     }
 
     private boolean runOnce(List<ItemStack> template, Process process) {
-        if (inputs.isEmpty()) {
+        boolean takesInputs = template.stream().anyMatch(stack -> !stack.isEmpty());
+        if (takesInputs && inputs.isEmpty()) {
             return fail(MachineProblem.NO_INPUTS);
         }
         if (outputs.isEmpty()) {
@@ -229,48 +263,57 @@ public final class ItemTransfer {
             takes.addAll(slotTakes);
             pulled.add(slotTakes.stream().map(Take::expected).toList());
         }
-        if (takes.isEmpty()) {
+        if (takes.isEmpty() && pulls.isEmpty()) {
             return fail(MachineProblem.EMPTY_TEMPLATE);
         }
         List<PlannedPull> plannedPulls = new ArrayList<>(pulls.size());
+        plannedValues.clear();
         for (Pull pull : pulls) {
             PlannedPull planned = planPull(pull, reserved);
             if (planned == null) {
                 return fail(pull.missing());
             }
             plannedPulls.add(planned);
+            plannedValues.put(pull, planned.value());
         }
 
         // 2. What comes out of these items.
-        Output output = process.apply(pulled);
+        Output output;
+        try {
+            output = process.apply(pulled);
+        } finally {
+            plannedValues.clear();
+        }
         if (output == null || output.products().isEmpty()) {
             return fail(MachineProblem.CANNOT_PROCESS);
         }
 
-        // 3. There must be room for everything that comes out (products only where they aren't stocked yet).
+        // 3. There must be room for everything that comes out, all together (products only where they aren't stocked
+        // yet). Stacks of the same kind are planned as one, so items that don't stack each get a slot of their own.
+        InsertionPlanner planner = new InsertionPlanner();
         List<Delivery> deliveries = new ArrayList<>();
-        for (ItemStack product : output.products()) {
+        for (ItemStack product : merge(List.of(output.products()))) {
             List<IItemHandler> unstocked = unstockedOutputs(product);
-            List<IItemHandler> targets = planDelivery(product, unstocked);
-            if (targets == null) {
+            List<InsertionPlanner.Insert> inserts = planner.plan(product, unstocked);
+            if (inserts == null) {
                 return fail(unstocked.isEmpty() ? MachineProblem.STOCKED : MachineProblem.OUTPUT_FULL);
             }
-            deliveries.add(new Delivery(product, targets));
+            deliveries.add(new Delivery(inserts, unstocked));
         }
-        for (ItemStack byproduct : output.byproducts()) {
-            List<IItemHandler> targets = planDelivery(byproduct, outputs);
-            if (targets == null) {
+        for (ItemStack byproduct : merge(List.of(output.byproducts()))) {
+            List<InsertionPlanner.Insert> inserts = planner.plan(byproduct, outputs);
+            if (inserts == null) {
                 return fail(MachineProblem.OUTPUT_FULL);
             }
-            deliveries.add(new Delivery(byproduct, targets));
+            deliveries.add(new Delivery(inserts, outputs));
         }
         for (PlannedPull planned : plannedPulls) {
             for (ItemStack leftover : planned.leftovers()) {
-                List<IItemHandler> targets = planDelivery(leftover, planned.pull().leftovers());
-                if (targets == null) {
+                List<InsertionPlanner.Insert> inserts = planner.plan(leftover, planned.pull().leftovers());
+                if (inserts == null) {
                     return fail(MachineProblem.LEFTOVER_FULL);
                 }
-                deliveries.add(new Delivery(leftover, targets));
+                deliveries.add(new Delivery(inserts, planned.pull().leftovers()));
             }
             takes.addAll(planned.takes());
         }
@@ -383,13 +426,14 @@ public final class ItemTransfer {
     }
 
     /**
-     * Finds items worth at least {@code pull.needed()} in its sources, taking earlier reservations into account.
+     * Finds items worth {@code pull.wanted()} in its sources, or as much as they hold, taking earlier reservations into
+     * account.
      *
-     * @return null if there aren't enough
+     * @return null if they don't even hold {@code pull.needed()}
      */
     @Nullable
     private PlannedPull planPull(Pull pull, Map<IItemHandler, Map<Integer, Integer>> reserved) {
-        int missing = pull.needed();
+        int missing = Math.max(pull.needed(), pull.wanted());
         int value = 0;
         List<Take> takes = new ArrayList<>(1);
         List<IItemHandler> sources = handlersInOrder(pull.sources());
@@ -418,7 +462,7 @@ public final class ItemTransfer {
                 missing -= amount * each;
             }
         }
-        if (missing > 0) {
+        if (value < pull.needed()) {
             return null;
         }
         List<List<ItemStack>> leftovers = new ArrayList<>(takes.size());
@@ -455,45 +499,26 @@ public final class ItemTransfer {
         return outputs.stream().filter(handler -> InventoryStockReader.count(handler, product, stockLimit) < stockLimit).toList();
     }
 
-    /**
-     * Where {@code stack} goes: preferably whole into the first of {@code targets} (in priority order) that takes all
-     * of it, otherwise split over them in order.
-     *
-     * @return the targets in the order to fill them, or null if it doesn't fit even split up
-     */
-    @Nullable
-    private static List<IItemHandler> planDelivery(ItemStack stack, List<IItemHandler> targets) {
-        for (int i = 0; i < targets.size(); i++) {
-            if (ItemHandlerHelper.insertItemStacked(targets.get(i), stack.copy(), true).isEmpty()) {
-                List<IItemHandler> ordered = new ArrayList<>(targets);
-                ordered.addFirst(ordered.remove(i));
-                return ordered;
-            }
-        }
-        ItemStack rest = stack.copy();
-        for (IItemHandler handler : targets) {
-            rest = ItemHandlerHelper.insertItemStacked(handler, rest, true);
-            if (rest.isEmpty()) {
-                return targets;
-            }
-        }
-        return null;
-    }
-
     // ---------------------------------------------------------------------------------------------------------------
     // Moving items
     // ---------------------------------------------------------------------------------------------------------------
 
     private void deliver(Delivery delivery) {
-        ItemStack rest = insertInto(delivery.stack().copy(), delivery.targets());
-        if (!rest.isEmpty()) {
-            // Possible when several stacks go into the same inventory: each fitted on its own when simulated.
-            LOGGER.debug("Output inventories refused {} that they accepted when simulated; returning it to the inputs at {}", rest, pos);
-            rest = insertInto(rest, inputs);
-        }
-        if (!rest.isEmpty()) {
-            LOGGER.debug("No inventory accepts {}; dropping it at {}", rest, pos);
-            drop(rest);
+        for (InsertionPlanner.Insert insert : delivery.inserts()) {
+            ItemStack rest = insert.handler().insertItem(insert.slot(), insert.stack().copy(), false);
+            if (rest.isEmpty()) {
+                continue;
+            }
+            // Only if the inventory doesn't do what it simulated (or a modded one simulates loosely).
+            rest = insertInto(rest, delivery.targets());
+            if (!rest.isEmpty()) {
+                LOGGER.debug("Output inventories refused {} that they accepted when simulated; returning it to the inputs at {}", rest, pos);
+                rest = insertInto(rest, inputs);
+            }
+            if (!rest.isEmpty()) {
+                LOGGER.debug("No inventory accepts {}; dropping it at {}", rest, pos);
+                drop(rest);
+            }
         }
     }
 
