@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 
 import com.mojang.logging.LogUtils;
 
+import laseta.bac.block.entity.BetterAutoHubBlockEntity;
 import laseta.bac.registry.ModBlockEntities;
 import laseta.bac.registry.ModBlocks;
 import laseta.bac.registry.ModConditions;
@@ -33,6 +34,7 @@ public class BetterAutoCrafter {
         ModRecipeTypes.register(modEventBus);
         ModConditions.register(modEventBus);
         ModCreativeTabs.register(modEventBus);
+        modEventBus.addListener(BetterAutoHubBlockEntity::registerCapabilities);
         modContainer.registerConfig(ModConfig.Type.COMMON, CommonConfig.SPEC);
     }
 }

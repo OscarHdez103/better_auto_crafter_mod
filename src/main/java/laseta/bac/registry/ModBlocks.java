@@ -3,6 +3,7 @@ package laseta.bac.registry;
 import laseta.bac.BetterAutoCrafter;
 import laseta.bac.block.BetterAutoCrafterBlock;
 import laseta.bac.block.BetterAutoBrewerBlock;
+import laseta.bac.block.BetterAutoHubBlock;
 import laseta.bac.block.BetterAutoMoverBlock;
 import laseta.bac.block.BetterAutoSmelterBlock;
 import laseta.bac.block.TranslocatorBlock;
@@ -53,6 +54,16 @@ public final class ModBlocks {
                     .instrument(NoteBlockInstrument.BASEDRUM)
                     .strength(3.5F)
                     .sound(SoundType.STONE));
+
+    /** Runs the mod's other machines in its tabs, all from one block. */
+    public static final DeferredBlock<BetterAutoHubBlock> BETTER_AUTO_HUB = BLOCKS.registerBlock(
+            "better_auto_hub",
+            BetterAutoHubBlock::new,
+            BlockBehaviour.Properties.of()
+                    .mapColor(MapColor.METAL)
+                    .instrument(NoteBlockInstrument.BASEDRUM)
+                    .strength(5.0F, 6.0F)
+                    .sound(SoundType.NETHERITE_BLOCK));
 
     /** Storage block of the mod's steel, like a block of iron (see {@link laseta.bac.material.Materials#STEEL}). */
     public static final DeferredBlock<Block> STEEL_BLOCK = BLOCKS.registerSimpleBlock(

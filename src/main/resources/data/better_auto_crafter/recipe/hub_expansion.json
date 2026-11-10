@@ -1,0 +1,29 @@
+{
+  "type": "better_auto_crafter:auto_crafting",
+  "pattern": [
+    "CCC",
+    "ULU",
+    "GGG"
+  ],
+  "key": {
+    "C": {
+      "tag": "minecraft:coals",
+      "count": 9
+    },
+    "U": {
+      "item": "better_auto_crafter:coprocessing_upgrade",
+      "count": 4
+    },
+    "L": {
+      "item": "better_auto_crafter:colored_led",
+      "count": 10
+    },
+    "G": {
+      "item": "minecraft:gold_nugget"
+    }
+  },
+  "result": {
+    "id": "better_auto_crafter:hub_expansion",
+    "count": 1
+  }
+}

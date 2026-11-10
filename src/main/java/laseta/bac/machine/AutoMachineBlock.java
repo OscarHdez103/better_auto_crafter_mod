@@ -6,6 +6,8 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BaseEntityBlock;
@@ -30,6 +32,9 @@ import org.jetbrains.annotations.Nullable;
  * on a rising edge in the "on powered" mode, shows when it is running and a failed operation for a moment, and opens
  * the machine's GUI.
  * Subclasses only add their block entity and, optionally, their own sounds.
+ *
+ * <p>Its item can also go into a tab of a {@link TabHost} (the Better Auto Hub), which then runs the machine itself
+ * (see {@link #createHosted}); a machine that mustn't can say so with {@link #canBeHosted()}.</p>
  */
 public abstract class AutoMachineBlock extends BaseEntityBlock {
     /** Direction the front of the block points to. Side configuration is stored relative to it. */
@@ -47,7 +52,7 @@ public abstract class AutoMachineBlock extends BaseEntityBlock {
      */
     public static final BooleanProperty FAILED = BooleanProperty.create("failed");
     /** Ticks between the redstone rising edge and the operation (the vanilla Crafter uses 4). */
-    private static final int OPERATION_DELAY = 1;
+    public static final int OPERATION_DELAY = 1;
 
     protected AutoMachineBlock(Properties properties) {
         super(properties);
@@ -59,10 +64,30 @@ public abstract class AutoMachineBlock extends BaseEntityBlock {
     protected abstract BlockEntityType<? extends AutoMachineBlockEntity> getBlockEntityType();
 
     /** Level event played after a successful operation in the "on powered" mode. */
-    protected abstract int getSuccessSound();
+    public abstract int getSuccessSound();
 
     /** Level event played after a failed operation in the "on powered" mode. */
-    protected abstract int getFailSound();
+    public abstract int getFailSound();
+
+    /** Whether the machine can go into a tab of a {@link TabHost}. Every machine can, by default. */
+    public boolean canBeHosted() {
+        return true;
+    }
+
+    /**
+     * A machine of this kind for a {@link TabHost} to run in one of its tabs: its block entity, not placed in the world,
+     * at the host's position. The host gives it its {@link MachineHost}.
+     */
+    public AutoMachineBlockEntity createHosted(BlockPos hostPos) {
+        return getBlockEntityType().create(hostPos, defaultBlockState());
+    }
+
+    /** The machine whose item {@code stack} is, if it can go into a host's tab; null for anything else. */
+    @Nullable
+    public static AutoMachineBlock hostable(ItemStack stack) {
+        return stack.getItem() instanceof BlockItem item && item.getBlock() instanceof AutoMachineBlock machine
+                && machine.canBeHosted() ? machine : null;
+    }
 
     @Override
     protected void createBlockStateDefinition(StateDefinition.@NotNull Builder<Block, BlockState> builder) {
@@ -86,19 +111,24 @@ public abstract class AutoMachineBlock extends BaseEntityBlock {
     @Override
     protected void neighborChanged(@NotNull BlockState state, @NotNull Level level, @NotNull BlockPos pos, @NotNull Block neighborBlock,
                                    @NotNull BlockPos neighborPos, boolean movedByPiston) {
-        if (level.isClientSide) {
-            return;
+        if (!level.isClientSide && updateTriggered(state, level, pos) && getRedstoneMode(level, pos) == RedstoneMode.ON_POWERED) {
+            level.scheduleTick(pos, this, OPERATION_DELAY);
         }
+    }
+
+    /**
+     * Server only: keeps {@link #TRIGGERED} of a block that has it (a machine's, or a host's) in sync with its redstone
+     * signal.
+     *
+     * @return true if the signal just turned on (a rising edge): the "on powered" mode runs a tick later, see
+     * {@link #OPERATION_DELAY}
+     */
+    public static boolean updateTriggered(BlockState state, Level level, BlockPos pos) {
         boolean powered = level.hasNeighborSignal(pos);
-        boolean wasPowered = state.getValue(TRIGGERED);
-        if (powered && !wasPowered) {
-            if (getRedstoneMode(level, pos) == RedstoneMode.ON_POWERED) {
-                level.scheduleTick(pos, this, OPERATION_DELAY);
-            }
-            level.setBlock(pos, state.setValue(TRIGGERED, true), Block.UPDATE_CLIENTS);
-        } else if (!powered && wasPowered) {
-            level.setBlock(pos, state.setValue(TRIGGERED, false), Block.UPDATE_CLIENTS);
+        if (powered != state.getValue(TRIGGERED)) {
+            level.setBlock(pos, state.setValue(TRIGGERED, powered), Block.UPDATE_CLIENTS);
         }
+        return powered && !state.getValue(TRIGGERED);
     }
 
     @Override

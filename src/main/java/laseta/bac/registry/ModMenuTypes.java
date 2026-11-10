@@ -5,6 +5,7 @@ import java.util.function.Supplier;
 import laseta.bac.BetterAutoCrafter;
 import laseta.bac.menu.BetterAutoCrafterMenu;
 import laseta.bac.menu.BetterAutoBrewerMenu;
+import laseta.bac.menu.BetterAutoHubMenu;
 import laseta.bac.menu.BetterAutoMoverMenu;
 import laseta.bac.menu.BetterAutoSmelterMenu;
 import net.minecraft.core.registries.Registries;
@@ -32,6 +33,11 @@ public final class ModMenuTypes {
     public static final Supplier<MenuType<BetterAutoBrewerMenu>> BETTER_AUTO_BREWER =
             MENU_TYPES.register("better_auto_brewer",
                     () -> IMenuTypeExtension.create(BetterAutoBrewerMenu::new));
+
+    /** The hub's menu for an empty tab; a tab with machines shows their own menu. */
+    public static final Supplier<MenuType<BetterAutoHubMenu>> BETTER_AUTO_HUB =
+            MENU_TYPES.register("better_auto_hub",
+                    () -> IMenuTypeExtension.create(BetterAutoHubMenu::new));
 
     private ModMenuTypes() {
     }

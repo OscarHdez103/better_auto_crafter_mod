@@ -54,6 +54,11 @@ public class AutoBrewingEmiRecipe extends BasicEmiRecipe {
         fuel = recipe.getFuel();
     }
 
+    /** The ingredients in brewing order: what fills the brewer's slots (the starter comes from its starter faces). */
+    public List<EmiIngredient> getBrewingIngredients() {
+        return ingredients;
+    }
+
     /** {@code stack} for each brew size, 1 to {@value BetterAutoBrewerBlockEntity#BREW_SIZE} starters. */
     private static Stream<EmiStack> byBrewSize(EmiStack stack, long perStarter) {
         return IntStream.rangeClosed(1, BetterAutoBrewerBlockEntity.BREW_SIZE)

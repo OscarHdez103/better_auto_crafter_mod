@@ -1,0 +1,87 @@
+{
+  "parent": "minecraft:block/block",
+  "render_type": "minecraft:cutout",
+  "textures": {
+    "particle": "better_auto_crafter:block/hub/better_auto_hub_side",
+    "north": "better_auto_crafter:block/hub/better_auto_hub_front",
+    "north_glow": "better_auto_crafter:block/hub/better_auto_hub_front_glow",
+    "south": "better_auto_crafter:block/hub/better_auto_hub_side",
+    "south_glow": "better_auto_crafter:block/hub/better_auto_hub_side_glow",
+    "east": "better_auto_crafter:block/hub/better_auto_hub_side",
+    "east_glow": "better_auto_crafter:block/hub/better_auto_hub_side_glow",
+    "west": "better_auto_crafter:block/hub/better_auto_hub_side",
+    "west_glow": "better_auto_crafter:block/hub/better_auto_hub_side_glow",
+    "up": "better_auto_crafter:block/hub/better_auto_hub_top",
+    "up_glow": "better_auto_crafter:block/hub/better_auto_hub_top_glow",
+    "down": "better_auto_crafter:block/hub/better_auto_hub_bottom",
+    "down_glow": "better_auto_crafter:block/hub/better_auto_hub_bottom_glow"
+  },
+  "elements": [
+    {
+      "from": [0, 0, 0],
+      "to": [16, 16, 16],
+      "faces": {
+        "north": {
+          "texture": "#north",
+          "cullface": "north"
+        },
+        "south": {
+          "texture": "#south",
+          "cullface": "south"
+        },
+        "east": {
+          "texture": "#east",
+          "cullface": "east"
+        },
+        "west": {
+          "texture": "#west",
+          "cullface": "west"
+        },
+        "up": {
+          "texture": "#up",
+          "cullface": "up"
+        },
+        "down": {
+          "texture": "#down",
+          "cullface": "down"
+        }
+      }
+    },
+    {
+      "from": [0, 0, 0],
+      "to": [16, 16, 16],
+      "faces": {
+        "north": {
+          "texture": "#north_glow",
+          "cullface": "north"
+        },
+        "south": {
+          "texture": "#south_glow",
+          "cullface": "south"
+        },
+        "east": {
+          "texture": "#east_glow",
+          "cullface": "east"
+        },
+        "west": {
+          "texture": "#west_glow",
+          "cullface": "west"
+        },
+        "up": {
+          "texture": "#up_glow",
+          "cullface": "up"
+        },
+        "down": {
+          "texture": "#down_glow",
+          "cullface": "down"
+        }
+      },
+      "shade": false,
+      "neoforge_data": {
+        "block_light": 15,
+        "sky_light": 15,
+        "ambient_occlusion": false
+      }
+    }
+  ]
+}

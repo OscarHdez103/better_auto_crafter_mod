@@ -33,6 +33,8 @@ import org.jetbrains.annotations.NotNull;
 public class AutoBrewingCategory extends AbstractRecipeCategory<RecipeHolder<AutoBrewingRecipe>> {
     public static final RecipeType<RecipeHolder<AutoBrewingRecipe>> TYPE =
             RecipeType.createRecipeHolderType(ResourceLocation.fromNamespaceAndPath(BetterAutoCrafter.MODID, "auto_brewing"));
+    /** The starter's slot: pulled from the starter faces, so it isn't filled into the brewer's slots ("+" button). */
+    public static final String STARTER_SLOT = "starter";
 
     private static final int SLOT = 18;
     private static final int WIDTH = AutoBrewingRecipe.MAX_INGREDIENTS * SLOT;
@@ -63,7 +65,7 @@ public class AutoBrewingCategory extends AbstractRecipeCategory<RecipeHolder<Aut
         // Lists of the same length cycle in step: each starter 1, 2 and 3 times, next to as many results.
         ItemStack result = recipe.getResultItem(Objects.requireNonNull(Minecraft.getInstance().level).registryAccess());
         List<ItemStack> starters = List.of(recipe.getStarter().getItems());
-        builder.addInputSlot(STARTER_X, BREW_Y).setStandardSlotBackground()
+        builder.addInputSlot(STARTER_X, BREW_Y).setSlotName(STARTER_SLOT).setStandardSlotBackground()
                 .addItemStacks(starters.stream().flatMap(starter -> byBrewSize(starter, 1)).toList());
         builder.addOutputSlot(RESULT_X, BREW_Y).setOutputSlotBackground()
                 .addItemStacks(starters.stream().flatMap(starter -> byBrewSize(result, result.getCount())).toList());

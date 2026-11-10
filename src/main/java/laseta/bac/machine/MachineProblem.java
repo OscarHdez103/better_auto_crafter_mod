@@ -38,7 +38,9 @@ public enum MachineProblem {
     /** No room on the leftover faces for what is left of the used fuel (e.g. an empty bucket). */
     LEFTOVER_FULL,
     /** An upgrade in the machine's own tab needs an item set before it works. */
-    UNSET_UPGRADE;
+    UNSET_UPGRADE,
+    /** Its host (the Better Auto Hub) doesn't have the energy for an operation. */
+    NO_ENERGY;
 
     private static final MachineProblem[] VALUES = values();
 

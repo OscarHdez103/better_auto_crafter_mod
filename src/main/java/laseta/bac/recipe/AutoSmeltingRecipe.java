@@ -1,5 +1,7 @@
 package laseta.bac.recipe;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 import com.mojang.serialization.Codec;
@@ -7,10 +9,12 @@ import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import io.netty.buffer.ByteBuf;
 
+import laseta.bac.BetterAutoCrafter;
 import laseta.bac.material.SharedMaterial;
 import laseta.bac.registry.ModItems;
 import laseta.bac.registry.ModRecipeSerializers;
 import laseta.bac.registry.ModRecipeTypes;
+import net.minecraft.core.Holder;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.NonNullList;
 import net.minecraft.core.registries.Registries;
@@ -51,7 +55,8 @@ import org.jetbrains.annotations.NotNull;
  *
  * <p>An optional {@code "result_tag"} (e.g. {@code "c:ingots/steel"}) is the result's common tag: while another mod has
  * an item in it, the recipe makes that item instead (same count), so a material many mods add is only made as one of
- * them (see {@link SharedMaterial}).</p>
+ * them (see {@link SharedMaterial}). The smelter still lets the player pick any of the tag's items, this mod's too
+ * ({@link #getResultOptions}).</p>
  */
 public class AutoSmeltingRecipe implements Recipe<SingleRecipeInput> {
     /** What a furnace burns while smelting one item. */
@@ -103,6 +108,31 @@ public class AutoSmeltingRecipe implements Recipe<SingleRecipeInput> {
         return resultTag.flatMap(tag -> SharedMaterial.otherModItem(registries, tag))
                 .map(item -> new ItemStack(item, result.getCount()))
                 .orElse(result);
+    }
+
+    /**
+     * Everything the recipe can make, its {@link #getResultItem} first: with a result tag, the other mods' items in it
+     * (in the tag's order), then the recipe's own result; otherwise just the result.
+     */
+    public List<ItemStack> getResultOptions(HolderLookup.@NotNull Provider registries) {
+        List<ItemStack> options = new ArrayList<>();
+        resultTag.flatMap(tag -> registries.lookup(Registries.ITEM).flatMap(items -> items.get(tag))).ifPresent(tagged -> {
+            for (Holder<Item> holder : tagged) {
+                boolean otherMod = holder.unwrapKey().map(key -> !key.location().getNamespace().equals(BetterAutoCrafter.MODID))
+                        .orElse(false);
+                if (otherMod) {
+                    addOption(options, new ItemStack(holder, result.getCount()));
+                }
+            }
+        });
+        addOption(options, result.copy());
+        return options;
+    }
+
+    private static void addOption(List<ItemStack> options, ItemStack option) {
+        if (options.stream().noneMatch(existing -> ItemStack.isSameItemSameComponents(existing, option))) {
+            options.add(option);
+        }
     }
 
     @Override

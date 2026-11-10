@@ -5,6 +5,7 @@ import java.util.function.Supplier;
 import laseta.bac.BetterAutoCrafter;
 import laseta.bac.block.entity.BetterAutoCrafterBlockEntity;
 import laseta.bac.block.entity.BetterAutoBrewerBlockEntity;
+import laseta.bac.block.entity.BetterAutoHubBlockEntity;
 import laseta.bac.block.entity.BetterAutoMoverBlockEntity;
 import laseta.bac.block.entity.BetterAutoSmelterBlockEntity;
 import net.minecraft.core.registries.Registries;
@@ -34,6 +35,11 @@ public final class ModBlockEntities {
     public static final Supplier<BlockEntityType<BetterAutoBrewerBlockEntity>> BETTER_AUTO_BREWER =
             BLOCK_ENTITIES.register("better_auto_brewer", () -> BlockEntityType.Builder
                     .of(BetterAutoBrewerBlockEntity::new, ModBlocks.BETTER_AUTO_BREWER.get())
+                    .build(null));
+
+    public static final Supplier<BlockEntityType<BetterAutoHubBlockEntity>> BETTER_AUTO_HUB =
+            BLOCK_ENTITIES.register("better_auto_hub", () -> BlockEntityType.Builder
+                    .of(BetterAutoHubBlockEntity::new, ModBlocks.BETTER_AUTO_HUB.get())
                     .build(null));
 
     private ModBlockEntities() {

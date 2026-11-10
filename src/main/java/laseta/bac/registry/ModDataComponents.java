@@ -9,6 +9,7 @@ import net.minecraft.core.GlobalPos;
 import net.minecraft.core.component.DataComponentType;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.util.ExtraCodecs;
 import net.minecraft.world.item.component.ItemContainerContents;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.registries.DeferredRegister;
@@ -40,6 +41,11 @@ public final class ModDataComponents {
     public static final Supplier<DataComponentType<ItemContainerContents>> UPGRADE_SETTING = DATA_COMPONENTS.registerComponentType(
             "upgrade_setting",
             builder -> builder.persistent(ItemContainerContents.CODEC).networkSynchronized(ItemContainerContents.STREAM_CODEC));
+
+    /** Hub Expansions used on a Better Auto Hub: each unlocked one more tab. Kept on its item when it is broken. */
+    public static final Supplier<DataComponentType<Integer>> HUB_EXPANSIONS = DATA_COMPONENTS.registerComponentType(
+            "hub_expansions",
+            builder -> builder.persistent(ExtraCodecs.NON_NEGATIVE_INT).networkSynchronized(ByteBufCodecs.VAR_INT));
 
     private ModDataComponents() {
     }

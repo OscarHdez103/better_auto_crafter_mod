@@ -626,6 +626,19 @@ public final class AutoCrafterGameTests {
     }
 
     @GameTest(template = TEMPLATE)
+    public static void coloredLedsAreCraftedFromFourDyes(GameTestHelper helper) {
+        BetterAutoCrafterBlockEntity crafter = placeCrafter(helper);
+        ItemStack infused = new ItemStack(ModItems.INFUSED_BETTER_MATERIAL.get());
+        ItemStack redstone = new ItemStack(Items.REDSTONE, 2);
+        setGrid(crafter, new ItemStack(Items.RED_DYE, 4), infused, new ItemStack(Items.GREEN_DYE, 4),
+                redstone, new ItemStack(Items.GLOWSTONE), redstone,
+                new ItemStack(Items.BLUE_DYE, 4), infused, new ItemStack(Items.WHITE_DYE, 4));
+        ItemStack result = crafter.getCraftingResult();
+        helper.assertTrue(result.is(ModItems.COLORED_LED.get()) && result.getCount() == 16, "16 Colored LEDs, got " + result);
+        helper.succeed();
+    }
+
+    @GameTest(template = TEMPLATE)
     public static void autoCraftingRecipeNeedsItsCountsInTheGrid(GameTestHelper helper) {
         BetterAutoCrafterBlockEntity crafter = placeCrafter(helper);
         ItemStack copper = new ItemStack(Items.COPPER_INGOT);

@@ -28,12 +28,12 @@ public class BetterAutoCrafterBlock extends AutoMachineBlock {
     }
 
     @Override
-    protected int getSuccessSound() {
+    public int getSuccessSound() {
         return LevelEvent.SOUND_CRAFTER_CRAFT;
     }
 
     @Override
-    protected int getFailSound() {
+    public int getFailSound() {
         return LevelEvent.SOUND_CRAFTER_FAIL;
     }
 

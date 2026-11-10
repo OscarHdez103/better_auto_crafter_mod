@@ -7,7 +7,7 @@ import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 
 @EventBusSubscriber(modid = BetterAutoCrafter.MODID)
 public final class ModNetworking {
-    private static final String PROTOCOL_VERSION = "3";
+    private static final String PROTOCOL_VERSION = "4";
 
     private ModNetworking() {
     }
@@ -17,6 +17,7 @@ public final class ModNetworking {
         event.registrar(PROTOCOL_VERSION)
                 .playToServer(FillTemplatePayload.TYPE, FillTemplatePayload.STREAM_CODEC, FillTemplatePayload::handle)
                 .playToServer(SetUpgradeSettingPayload.TYPE, SetUpgradeSettingPayload.STREAM_CODEC, SetUpgradeSettingPayload::handle)
+                .playToServer(SelectHostTabPayload.TYPE, SelectHostTabPayload.STREAM_CODEC, SelectHostTabPayload::handle)
                 .playToClient(RecipeChoicesPayload.TYPE, RecipeChoicesPayload.STREAM_CODEC, RecipeChoicesPayload::handle);
     }
 }

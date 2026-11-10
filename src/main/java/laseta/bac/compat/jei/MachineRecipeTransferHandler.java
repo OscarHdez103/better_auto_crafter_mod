@@ -3,6 +3,7 @@ package laseta.bac.compat.jei;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -31,7 +32,8 @@ import org.jetbrains.annotations.Nullable;
 
 /**
  * JEI "+" button that fills a machine's template with a recipe's inputs, in order: the crafter's grid with crafting and
- * auto crafting recipes, the smelter's input with any cooking recipe. Places whatever ingredients the player has, as
+ * auto crafting recipes, the smelter's input with any cooking recipe, the brewer's row with its own recipes' ingredients
+ * (not the starter, which comes from the starter faces). Places whatever ingredients the player has, as
  * many as one operation takes (or as many operations' worth as fit, with shift); slots it can't fill are highlighted in
  * red but the button still works. It is only disabled when nothing at all can be placed. The machine then makes that
  * very recipe, if its template makes several.
@@ -45,14 +47,26 @@ public class MachineRecipeTransferHandler<C extends AutoMachineMenu, R extends R
     private final Class<C> menuClass;
     private final Supplier<MenuType<C>> menuType;
     private final RecipeType<RecipeHolder<R>> recipeType;
+    /** The category's input slots that go into the template; others (the brewer's starter) are left out. */
+    private final Predicate<IRecipeSlotView> templateInput;
 
     /** @param recipeType a category whose inputs are laid out in the template's slot order */
     public MachineRecipeTransferHandler(IRecipeTransferHandlerHelper helper, Class<C> menuClass, Supplier<MenuType<C>> menuType,
                                         RecipeType<RecipeHolder<R>> recipeType) {
+        this(helper, menuClass, menuType, recipeType, slot -> true);
+    }
+
+    /**
+     * @param recipeType    a category whose template inputs are laid out in the template's slot order
+     * @param templateInput which of its input slots go into the template
+     */
+    public MachineRecipeTransferHandler(IRecipeTransferHandlerHelper helper, Class<C> menuClass, Supplier<MenuType<C>> menuType,
+                                        RecipeType<RecipeHolder<R>> recipeType, Predicate<IRecipeSlotView> templateInput) {
         this.helper = helper;
         this.menuClass = menuClass;
         this.menuType = menuType;
         this.recipeType = recipeType;
+        this.templateInput = templateInput;
     }
 
     @Override
@@ -77,7 +91,9 @@ public class MachineRecipeTransferHandler<C extends AutoMachineMenu, R extends R
                                                          IRecipeSlotsView recipeSlots, @NotNull Player player,
                                                          boolean maxTransfer, boolean doTransfer) {
         // JEI's crafting categories lay their inputs out as the 3x3 grid, in order; cooking ones have a single input.
-        List<IRecipeSlotView> inputs = recipeSlots.getSlotViews(RecipeIngredientRole.INPUT);
+        List<IRecipeSlotView> inputs = recipeSlots.getSlotViews(RecipeIngredientRole.INPUT).stream()
+                .filter(templateInput)
+                .toList();
         if (inputs.size() > menu.templateSize()) {
             return helper.createUserErrorWithTooltip(Component.translatable("gui.better_auto_crafter.transfer.too_large"));
         }

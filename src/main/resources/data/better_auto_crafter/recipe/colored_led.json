@@ -1,0 +1,37 @@
+{
+  "type": "better_auto_crafter:auto_crafting",
+  "pattern": [
+    "RGB",
+    "SLS",
+    "I I"
+  ],
+  "key": {
+    "R": {
+      "tag": "c:dyes/red",
+      "count": 3
+    },
+    "G": {
+      "tag": "c:dyes/green",
+      "count": 3
+    },
+    "B": {
+      "tag": "c:dyes/blue",
+      "count": 3
+    },
+    "I": {
+      "item": "better_auto_crafter:infused_better_material",
+      "count": 4
+    },
+    "S": {
+      "tag": "c:dusts/redstone"
+    },
+    "L": {
+      "item": "minecraft:glowstone_dust",
+      "count": 3
+    }
+  },
+  "result": {
+    "id": "better_auto_crafter:colored_led",
+    "count": 6
+  }
+}

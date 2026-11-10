@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.function.Consumer;
 
 import laseta.bac.client.screen.widget.ChoicePopup;
+import laseta.bac.client.screen.widget.HostTabStrip;
 import laseta.bac.client.screen.widget.MachineSettingsTab;
 import laseta.bac.client.screen.widget.MachineStatusIcon;
 import laseta.bac.client.screen.widget.MachineTab;
@@ -16,9 +17,11 @@ import laseta.bac.client.screen.widget.UpgradesTab;
 import laseta.bac.item.LinkingUpgradeItem;
 import laseta.bac.machine.AutoMachineBlock;
 import laseta.bac.machine.AutoMachineMenu;
+import laseta.bac.machine.HostTabs;
 import laseta.bac.machine.MachineLayout;
 import laseta.bac.machine.MachineOption;
 import laseta.bac.machine.RecipeChoices;
+import laseta.bac.menu.slot.HostTabSlot;
 import laseta.bac.menu.slot.MachineUpgradeSlot;
 import laseta.bac.menu.slot.UpgradeSlot;
 import laseta.bac.network.SetUpgradeSettingPayload;
@@ -35,6 +38,7 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.neoforged.neoforge.network.PacketDistributor;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -48,6 +52,9 @@ import org.jetbrains.annotations.Nullable;
  *
  * <p>When the template makes several recipes, a small button next to the result ({@link #recipeButtonX()}) opens a
  * panel of their results to pick the one the machine makes.</p>
+ *
+ * <p>For a machine in a host's tab (the Better Auto Hub), the host's tabs are above the GUI ({@link HostTabStrip}), and
+ * the side configuration shows the host's faces: machine screens need nothing for it.</p>
  */
 public abstract class AutoMachineScreen<M extends AutoMachineMenu> extends AbstractContainerScreen<M> {
     /**
@@ -88,6 +95,9 @@ public abstract class AutoMachineScreen<M extends AutoMachineMenu> extends Abstr
     /** The choices the open panel was made from: it closes when they change. */
     @Nullable
     private RecipeChoices popupChoices;
+    /** The host's tabs above the GUI, for a machine in one of them. */
+    @Nullable
+    private HostTabStrip tabStrip;
 
     protected AutoMachineScreen(M menu, Inventory playerInventory, Component title) {
         super(menu, playerInventory, title);
@@ -101,13 +111,20 @@ public abstract class AutoMachineScreen<M extends AutoMachineMenu> extends Abstr
     @Override
     protected void init() {
         super.init();
+        HostTabs tabs = menu.getHostTabs();
+        if (tabs != null) {
+            tabStrip = new HostTabStrip(tabs, menu.containerId);
+            topPos += tabStrip.getGuiOffset();
+            tabStrip.setGuiOrigin(leftPos, topPos);
+        }
+        // The block whose faces the machine uses: its own, or its host's.
         BlockState state = minecraft.level.getBlockState(menu.getBlockPos());
-        if (!state.is(menu.getMachineBlock())) {
+        if (tabs != null ? !state.hasProperty(AutoMachineBlock.FACING) : !state.is(menu.getMachineBlock())) {
             state = menu.getMachineBlock().defaultBlockState();
         }
         Direction facing = state.getValue(AutoMachineBlock.FACING);
         // Face textures always come from the normal (not running, not failed) model, so they don't change with the state.
-        BlockState unpowered = state.setValue(AutoMachineBlock.POWERED, false).setValue(AutoMachineBlock.FAILED, false);
+        BlockState unpowered = withoutShownState(state);
         text = new MachineText(menu.getMachineBlock());
         statusIcon = new MachineStatusIcon(menu, text);
 
@@ -128,6 +145,15 @@ public abstract class AutoMachineScreen<M extends AutoMachineMenu> extends Abstr
         leftTabs.setPosition(leftPos, topPos + UpgradeLayout.TAB_TOP);
         // One open tab at a time on the whole screen, whichever side it is on.
         SideTabGroup.linkExclusive(rightTabs, leftTabs);
+    }
+
+    private static BlockState withoutShownState(BlockState state) {
+        for (BooleanProperty property : List.of(AutoMachineBlock.POWERED, AutoMachineBlock.FAILED)) {
+            if (state.hasProperty(property)) {
+                state = state.setValue(property, false);
+            }
+        }
+        return state;
     }
 
     /**
@@ -256,6 +282,9 @@ public abstract class AutoMachineScreen<M extends AutoMachineMenu> extends Abstr
         }
         List<Rect2i> areas = new ArrayList<>(rightTabs.getExclusionAreas());
         areas.addAll(leftTabs.getExclusionAreas());
+        if (tabStrip != null) {
+            areas.add(tabStrip.getArea());
+        }
         return areas;
     }
 
@@ -293,6 +322,11 @@ public abstract class AutoMachineScreen<M extends AutoMachineMenu> extends Abstr
         if (rightTabs.renderTooltip(graphics, font, mouseX, mouseY) || leftTabs.renderTooltip(graphics, font, mouseX, mouseY)) {
             return;
         }
+        List<Component> stripTooltip = tabStrip == null ? null : tabStrip.getTooltip(mouseX, mouseY, menu.getCarried());
+        if (stripTooltip != null) {
+            graphics.renderComponentTooltip(font, stripTooltip, mouseX, mouseY);
+            return;
+        }
         if (menu.getCarried().isEmpty() && !choicePopup.isOpen() && isOverRecipeButton(mouseX, mouseY)) {
             graphics.renderTooltip(font, Component.translatable("gui.better_auto_crafter.recipe_choice"), mouseX, mouseY);
             return;
@@ -307,7 +341,13 @@ public abstract class AutoMachineScreen<M extends AutoMachineMenu> extends Abstr
 
     @Override
     protected void renderBg(@NotNull GuiGraphics graphics, float partialTick, int mouseX, int mouseY) {
+        if (tabStrip != null) {
+            tabStrip.renderBehind(graphics);
+        }
         renderMachineBackground(graphics);
+        if (tabStrip != null) {
+            tabStrip.renderFront(graphics);
+        }
         statusIcon.render(graphics, leftPos + statusIconX(), topPos + statusIconY(), partialTick);
         if (showsRecipeButton()) {
             ChoicePopup.renderButton(graphics, leftPos + recipeButtonX(), topPos + recipeButtonY(),
@@ -317,18 +357,26 @@ public abstract class AutoMachineScreen<M extends AutoMachineMenu> extends Abstr
         leftTabs.render(graphics, font, mouseX, mouseY);
     }
 
+    @Override
+    protected void renderLabels(@NotNull GuiGraphics graphics, int mouseX, int mouseY) {
+        super.renderLabels(graphics, mouseX, mouseY);
+        if (tabStrip != null) {
+            tabStrip.renderLamps(graphics);
+        }
+    }
+
     /** The GUI's background: a vanilla-style panel with a frame behind every slot (the tabs draw their own). */
     protected void renderMachineBackground(GuiGraphics graphics) {
         drawPanel(graphics, leftPos, topPos, imageWidth, imageHeight);
         for (Slot slot : menu.slots) {
-            if (!(slot instanceof UpgradeSlot) && !(slot instanceof MachineUpgradeSlot)) {
+            if (!(slot instanceof UpgradeSlot) && !(slot instanceof MachineUpgradeSlot) && !(slot instanceof HostTabSlot)) {
                 drawSlot(graphics, leftPos + slot.x - 1, topPos + slot.y - 1);
             }
         }
     }
 
     /** Bevelled panel like vanilla's container backgrounds. */
-    private static void drawPanel(GuiGraphics graphics, int x, int y, int width, int height) {
+    protected static void drawPanel(GuiGraphics graphics, int x, int y, int width, int height) {
         int right = x + width;
         int bottom = y + height;
         graphics.fill(x + 1, y, right - 1, y + 1, PANEL_OUTLINE);
@@ -376,6 +424,9 @@ public abstract class AutoMachineScreen<M extends AutoMachineMenu> extends Abstr
             openRecipePopup();
             return consumeClick();
         }
+        if (tabStrip != null && tabStrip.mouseClicked(mouseX, mouseY, menu.getCarried())) {
+            return consumeClick();
+        }
         if (rightTabs.mouseClicked(mouseX, mouseY, button) || leftTabs.mouseClicked(mouseX, mouseY, button)) {
             ignoreNextRelease = true;
             return true;
@@ -397,6 +448,7 @@ public abstract class AutoMachineScreen<M extends AutoMachineMenu> extends Abstr
         // Clicking a tab must never count as "outside", which would drop the carried item.
         return super.hasClickedOutside(mouseX, mouseY, guiLeft, guiTop, button)
                 && !rightTabs.isMouseOver(mouseX, mouseY)
-                && !leftTabs.isMouseOver(mouseX, mouseY);
+                && !leftTabs.isMouseOver(mouseX, mouseY)
+                && (tabStrip == null || !tabStrip.isMouseOver(mouseX, mouseY));
     }
 }

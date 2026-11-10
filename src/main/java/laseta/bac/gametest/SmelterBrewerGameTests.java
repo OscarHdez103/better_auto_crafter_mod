@@ -2,6 +2,7 @@ package laseta.bac.gametest;
 
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -240,6 +241,37 @@ public final class SmelterBrewerGameTests {
         smelter.getStatus().endCooldown();
         helper.assertTrue(!smelter.attemptOperation(), "only 2 iron left");
         helper.assertTrue(smelter.getStatus().getLastProblem() == MachineProblem.MISSING_ITEMS, "says items are missing");
+        helper.succeed();
+    }
+
+    @GameTest(template = TEMPLATE)
+    public static void smelterCanMakeAnyModsSteel(GameTestHelper helper) {
+        BetterAutoSmelterBlockEntity smelter = placeSmelter(helper, new ItemStack(Items.IRON_INGOT, 3));
+        Container input = placeChest(helper, TOP, new ItemStack(Items.IRON_INGOT, 3));
+        Container output = placeChest(helper, BOTTOM);
+        smelter.getFuel().add(400);
+
+        // Every steel is offered, the one in use first and this mod's last (even while another mod's is used).
+        List<ItemStack> steels = smelter.getRecipeChoices().choices().stream()
+                .filter(choice -> choice.group() == BetterAutoSmelterBlockEntity.Kind.toId(BetterAutoSmelterBlockEntity.Kind.AUTO_SMELTING))
+                .map(RecipeChoices.Choice::result).toList();
+        Item inUse = Materials.STEEL.mainItem(helper.getLevel().registryAccess(), 1).getItem();
+        helper.assertTrue(!steels.isEmpty() && steels.getFirst().is(inUse), "the steel in use first, got " + steels);
+        helper.assertTrue(steels.getLast().is(ModItems.STEEL_INGOT.get()), "this mod's steel last, got " + steels);
+        int own = steels.size() - 1;
+        helper.assertTrue(smelter.chooseRecipe(own), "this mod's steel chosen");
+
+        // Kept when saved, and when a recipe viewer fills in the same recipe again.
+        CompoundTag saved = smelter.saveWithoutMetadata(helper.getLevel().registryAccess());
+        smelter.chooseRecipe(0);
+        smelter.loadWithComponents(saved, helper.getLevel().registryAccess());
+        helper.assertTrue(smelter.getResult().is(ModItems.STEEL_INGOT.get()), "still this mod's after loading");
+        helper.assertTrue(smelter.chooseRecipe(ResourceLocation.fromNamespaceAndPath("better_auto_crafter", "steel_ingot_from_smelting")),
+                "the recipe filled in");
+        helper.assertTrue(smelter.getResult().is(ModItems.STEEL_INGOT.get()), "still this mod's");
+
+        helper.assertTrue(smelter.attemptOperation(), "smelts");
+        assertCount(helper, output, ModItems.STEEL_INGOT.get(), 1, "this mod's steel made");
         helper.succeed();
     }
 
@@ -509,6 +541,27 @@ public final class SmelterBrewerGameTests {
         assertCount(helper, input, steel, 64 - 9, "nine steel used");
         helper.assertTrue(brewer.getFuel().getStored() == BetterAutoBrewerBlockEntity.FUEL_PER_ITEM - 9,
                 "nine brews' fuel used, got " + brewer.getFuel().getStored());
+        helper.succeed();
+    }
+
+    @GameTest(template = TEMPLATE)
+    public static void brewerIsFilledFromRecipeViewers(GameTestHelper helper) {
+        Item steel = ModItems.STEEL_INGOT.get();
+        BetterAutoBrewerBlockEntity brewer = placeBrewer(helper);
+        Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+        player.getInventory().add(new ItemStack(steel, 20));
+        BetterAutoBrewerMenu menu = new BetterAutoBrewerMenu(0, player.getInventory(), brewer);
+        List<List<ItemStack>> nineSteel = Collections.nCopies(BetterAutoBrewerBlockEntity.GRID_SIZE, List.of(new ItemStack(steel)));
+
+        // Infused Better Material's "+" (its starter isn't filled in), even with shift: one steel per slot.
+        for (boolean shift : new boolean[]{false, true}) {
+            menu.fillTemplate(player, nineSteel, shift, ResourceLocation.fromNamespaceAndPath(BetterAutoCrafter.MODID, "infused_better_material"));
+            for (int i = 0; i < BetterAutoBrewerBlockEntity.GRID_SIZE; i++) {
+                ItemStack slot = brewer.getTemplate().getStackInSlot(i);
+                helper.assertTrue(slot.is(steel) && slot.getCount() == 1, "one steel in slot " + i + ", got " + slot);
+            }
+            helper.assertTrue(player.getInventory().countItem(steel) == 20 - 9, "nine steel taken, shift " + shift);
+        }
         helper.succeed();
     }
 

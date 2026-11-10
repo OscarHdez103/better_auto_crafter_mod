@@ -25,6 +25,9 @@ import net.minecraft.util.Mth;
  */
 public class MachineStatusIcon {
     public static final int SIZE = 12;
+    /** Where the lamp is in its sprites, in the middle of the ring. */
+    private static final int LAMP_OFFSET = 4;
+    private static final int LAMP_SIZE = 4;
     private static final ResourceLocation FRAME = sprite("frame");
     private static final ResourceLocation RING = sprite("ring");
     private static final Map<MachineState, ResourceLocation> LAMPS = new EnumMap<>(MachineState.class);
@@ -94,6 +97,11 @@ public class MachineStatusIcon {
         }
     }
 
+    /** Draws only the lamp of a state, its 4x4 pixels at the given corner (e.g. in a host's tab, see HostTabStrip). */
+    public static void renderLamp(GuiGraphics graphics, MachineState state, int x, int y) {
+        graphics.blitSprite(LAMPS.get(state), SIZE, SIZE, LAMP_OFFSET, LAMP_OFFSET, x, y, LAMP_SIZE, LAMP_SIZE);
+    }
+
     public static boolean isMouseOver(int x, int y, double mouseX, double mouseY) {
         return mouseX >= x && mouseX < x + SIZE && mouseY >= y && mouseY < y + SIZE;
     }
@@ -122,7 +130,7 @@ public class MachineStatusIcon {
         };
     }
 
-    private static ChatFormatting color(MachineState state) {
+    public static ChatFormatting color(MachineState state) {
         return switch (state) {
             case OFF -> ChatFormatting.GRAY;
             case WAITING -> ChatFormatting.GOLD;

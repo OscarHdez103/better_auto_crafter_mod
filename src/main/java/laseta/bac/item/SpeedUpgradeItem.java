@@ -6,6 +6,7 @@ import java.util.Locale;
 import laseta.bac.upgrade.UpgradeInstaller;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -34,6 +35,28 @@ public class SpeedUpgradeItem extends Item {
     /** How many speed upgrades it takes to reach {@link #MIN_TICKS} from {@code baseSpeed}; more would do nothing. */
     public static int getUsefulCount(int baseSpeed) {
         return Math.max(0, (baseSpeed - MIN_TICKS + TICKS_PER_UPGRADE - 1) / TICKS_PER_UPGRADE);
+    }
+
+    /**
+     * Like {@link #getOperationTicks(int, int)}, for a machine running at {@code percent}% of its speed (in a hub).
+     * With {@code extra}, upgrades keep counting past the normal fastest speed until it is reached again; without, the
+     * fastest it gets is that percentage of the normal fastest speed.
+     */
+    public static int getOperationTicks(int baseSpeed, int count, int percent, boolean extra) {
+        if (percent >= 100) {
+            return getOperationTicks(baseSpeed, count);
+        }
+        int ticks = extra ? Math.max(0, baseSpeed - count * TICKS_PER_UPGRADE) : getOperationTicks(baseSpeed, count);
+        return Math.max(MIN_TICKS, Mth.positiveCeilDiv(ticks * 100, percent));
+    }
+
+    /** Like {@link #getUsefulCount(int)}, for a machine running at {@code percent}% of its speed (see above). */
+    public static int getUsefulCount(int baseSpeed, int percent, boolean extra) {
+        if (percent >= 100 || !extra) {
+            return getUsefulCount(baseSpeed);
+        }
+        // The fewest upgrades for which (baseSpeed - count * TICKS_PER_UPGRADE) * 100 / percent <= MIN_TICKS
+        return Math.max(0, Mth.positiveCeilDiv(Math.max(0, baseSpeed * 100 - MIN_TICKS * percent), TICKS_PER_UPGRADE * 100));
     }
 
     @Override

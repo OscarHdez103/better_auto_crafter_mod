@@ -6,9 +6,11 @@ import java.util.List;
 
 import laseta.bac.BetterAutoCrafter;
 import laseta.bac.compat.StorageLinkIntegrations;
+import laseta.bac.item.BetterAutoHubItem;
 import laseta.bac.item.CoprocessingUpgradeItem;
 import laseta.bac.item.CraftingComponentItem;
 import laseta.bac.item.FuelFilterUpgradeItem;
+import laseta.bac.item.HubExpansionItem;
 import laseta.bac.item.InfiniteWaterUpgradeItem;
 import laseta.bac.item.MultiTranslocationUpgradeItem;
 import laseta.bac.item.PotionStarterUpgradeItem;
@@ -33,6 +35,8 @@ public final class ModItems {
     public static final DeferredItem<BlockItem> BETTER_AUTO_MOVER = ITEMS.registerSimpleBlockItem(ModBlocks.BETTER_AUTO_MOVER);
     public static final DeferredItem<BlockItem> BETTER_AUTO_SMELTER = ITEMS.registerSimpleBlockItem(ModBlocks.BETTER_AUTO_SMELTER);
     public static final DeferredItem<BlockItem> BETTER_AUTO_BREWER = ITEMS.registerSimpleBlockItem(ModBlocks.BETTER_AUTO_BREWER);
+    public static final DeferredItem<BetterAutoHubItem> BETTER_AUTO_HUB = ITEMS.registerItem("better_auto_hub",
+            properties -> new BetterAutoHubItem(ModBlocks.BETTER_AUTO_HUB.get(), properties), new Item.Properties().rarity(Rarity.EPIC));
     public static final DeferredItem<BlockItem> TRANSLOCATOR = ITEMS.registerSimpleBlockItem(ModBlocks.TRANSLOCATOR);
 
     /** Only made by the Better Auto Crafter (an auto crafting recipe); goes into the recipes of the mod's machines. */
@@ -40,6 +44,9 @@ public final class ModItems {
             CraftingComponentItem::new, new Item.Properties());
     /** Better Material infused with steel: only brewed in the Better Auto Brewer (an auto brewing recipe). */
     public static final DeferredItem<CraftingComponentItem> INFUSED_BETTER_MATERIAL = ITEMS.registerItem("infused_better_material",
+            CraftingComponentItem::new, new Item.Properties());
+    /** A small LED cycling through every colour, made 16 at a time by the Better Auto Crafter. Not used in recipes yet. */
+    public static final DeferredItem<CraftingComponentItem> COLORED_LED = ITEMS.registerItem("colored_led",
             CraftingComponentItem::new, new Item.Properties());
 
     /**
@@ -86,6 +93,10 @@ public final class ModItems {
             SpeedUpgradeItem::new, new Item.Properties().rarity(Rarity.UNCOMMON));
     public static final DeferredItem<CoprocessingUpgradeItem> COPROCESSING_UPGRADE = ITEMS.registerItem("coprocessing_upgrade",
             CoprocessingUpgradeItem::new, new Item.Properties().rarity(Rarity.RARE));
+
+    /** Unlocks one more tab of a Better Auto Hub. */
+    public static final DeferredItem<HubExpansionItem> HUB_EXPANSION = ITEMS.registerItem("hub_expansion",
+            HubExpansionItem::new, new Item.Properties().rarity(Rarity.RARE));
 
     /** Upgrades only some machines take, in their own tab: the brewer's starter slot and the smelter's fuel filter slot. */
     public static final DeferredItem<InfiniteWaterUpgradeItem> INFINITE_WATER_UPGRADE = ITEMS.registerItem("infinite_water_upgrade",

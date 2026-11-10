@@ -7,11 +7,13 @@ import laseta.bac.BetterAutoCrafter;
 import laseta.bac.client.screen.AutoMachineScreen;
 import laseta.bac.client.screen.BetterAutoCrafterScreen;
 import laseta.bac.client.screen.BetterAutoBrewerScreen;
+import laseta.bac.client.screen.BetterAutoHubScreen;
 import laseta.bac.client.screen.BetterAutoMoverScreen;
 import laseta.bac.client.screen.BetterAutoSmelterScreen;
 import laseta.bac.compat.MachineFuel;
 import laseta.bac.machine.AutoMachineMenu;
 import laseta.bac.material.Materials;
+import laseta.bac.menu.BetterAutoBrewerMenu;
 import laseta.bac.menu.BetterAutoCrafterMenu;
 import laseta.bac.menu.BetterAutoSmelterMenu;
 import laseta.bac.registry.ModItems;
@@ -57,6 +59,13 @@ public class JeiCompat implements IModPlugin {
         addMachineScreen(registration, BetterAutoMoverScreen.class);
         addMachineScreen(registration, BetterAutoSmelterScreen.class);
         addMachineScreen(registration, BetterAutoBrewerScreen.class);
+        // The hub's empty tab: its tabs (a tab with machines shows their own screen).
+        registration.addGuiContainerHandler(BetterAutoHubScreen.class, new IGuiContainerHandler<>() {
+            @Override
+            public @NotNull List<Rect2i> getGuiExtraAreas(@NotNull BetterAutoHubScreen screen) {
+                return screen.getExtraAreas();
+            }
+        });
         // Clicking the arrow shows all recipes the crafter makes, like on the vanilla crafting table.
         registration.addRecipeClickArea(BetterAutoCrafterScreen.class,
                 BetterAutoCrafterScreen.ARROW_X, BetterAutoCrafterScreen.ARROW_Y,
@@ -128,6 +137,9 @@ public class JeiCompat implements IModPlugin {
                 ModMenuTypes.BETTER_AUTO_SMELTER, RecipeTypes.SMOKING));
         addTransfer(registration, new MachineRecipeTransferHandler<>(helper, BetterAutoSmelterMenu.class,
                 ModMenuTypes.BETTER_AUTO_SMELTER, RecipeTypes.SMELTING));
+        addTransfer(registration, new MachineRecipeTransferHandler<>(helper, BetterAutoBrewerMenu.class,
+                ModMenuTypes.BETTER_AUTO_BREWER, AutoBrewingCategory.TYPE,
+                slot -> slot.getSlotName().filter(AutoBrewingCategory.STARTER_SLOT::equals).isEmpty()));
     }
 
     private static <C extends AutoMachineMenu, R extends Recipe<?>> void addTransfer(IRecipeTransferRegistration registration,
@@ -141,6 +153,11 @@ public class JeiCompat implements IModPlugin {
         registration.addRecipeCatalyst(ModItems.BETTER_AUTO_SMELTER.get(), AutoSmeltingCategory.TYPE, RecipeTypes.CAMPFIRE_COOKING,
                 RecipeTypes.BLASTING, RecipeTypes.SMOKING, RecipeTypes.SMELTING, MachineFuelCategory.SMELTER);
         registration.addRecipeCatalyst(ModItems.BETTER_AUTO_BREWER.get(), AutoBrewingCategory.TYPE, RecipeTypes.BREWING,
+                MachineFuelCategory.BREWER);
+        // The hub does all of it, with those machines in its tabs.
+        registration.addRecipeCatalyst(ModItems.BETTER_AUTO_HUB.get(), RecipeTypes.CRAFTING, AutoCraftingCategory.TYPE,
+                AutoSmeltingCategory.TYPE, RecipeTypes.CAMPFIRE_COOKING, RecipeTypes.BLASTING, RecipeTypes.SMOKING,
+                RecipeTypes.SMELTING, MachineFuelCategory.SMELTER, AutoBrewingCategory.TYPE, RecipeTypes.BREWING,
                 MachineFuelCategory.BREWER);
     }
 

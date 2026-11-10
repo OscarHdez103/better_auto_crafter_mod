@@ -23,6 +23,7 @@ import laseta.bac.registry.ModRecipeTypes;
 import laseta.bac.upgrade.TranslocationMode;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
@@ -48,7 +49,8 @@ import org.jetbrains.annotations.Nullable;
  *
  * <p>Recipes are tried in this order: its own (once the input slot holds as many items as they take); campfire
  * recipes, which need no fuel; blasting and smoking recipes, which use half a furnace's fuel; and furnace recipes. The
- * player can pick any other recipe that matches instead, of another kind or the same ({@link #chooseRecipe}). Fuel is counted in furnace burn ticks, and a recipe uses its
+ * player can pick any other recipe that matches instead, of another kind or the same ({@link #chooseRecipe}), and with
+ * its own recipes of a material many mods add (steel), which mod's item it makes. Fuel is counted in furnace burn ticks, and a recipe uses its
  * cooking time's worth, as a furnace burns while cooking (so 200 for most furnace recipes, 100 for blasting and
  * smoking ones). Fuel comes from the fuel faces, only when the stored fuel isn't enough; what is left of a fuel (the
  * bucket of a lava bucket) goes to the leftover faces. A Fuel Filter Upgrade limits it to one fuel.</p>
@@ -117,6 +119,9 @@ public class BetterAutoSmelterBlockEntity extends AutoMachineBlockEntity {
     /** The recipe the player picked, used whenever it matches the input slot's items. */
     @Nullable
     private ResourceLocation chosenRecipe;
+    /** Of the picked recipe's results (when it has several, like steel's), the item picked; null for its first. */
+    @Nullable
+    private ResourceLocation chosenResult;
 
     public BetterAutoSmelterBlockEntity(BlockPos pos, BlockState state) {
         super(ModBlockEntities.BETTER_AUTO_SMELTER.get(), pos, state, 1, 1, FEATURES);
@@ -147,11 +152,25 @@ public class BetterAutoSmelterBlockEntity extends AutoMachineBlockEntity {
         cookingDirty = false;
         cachedCookings = findCookings(getTemplate().getStackInSlot(0));
         cachedChosen = cachedCookings.isEmpty() ? -1 : 0;
-        for (int i = 0; i < cachedCookings.size(); i++) {
-            if (cachedCookings.get(i).id().equals(chosenRecipe)) {
-                cachedChosen = i;
+        // The picked recipe making the picked item; or, if that item is gone (its mod removed), the recipe's first.
+        int sameRecipe = -1;
+        for (int i = cachedCookings.size() - 1; i >= 0; i--) {
+            Cooking cooking = cachedCookings.get(i);
+            if (cooking.id().equals(chosenRecipe)) {
+                sameRecipe = i;
+                if (resultId(cooking.result()).equals(chosenResult)) {
+                    cachedChosen = i;
+                    return;
+                }
             }
         }
+        if (sameRecipe >= 0) {
+            cachedChosen = sameRecipe;
+        }
+    }
+
+    private static ResourceLocation resultId(ItemStack result) {
+        return BuiltInRegistries.ITEM.getKey(result.getItem());
     }
 
     /** The recipe the smelter cooks with: the player's choice if it matches, otherwise the first one tried. */
@@ -170,7 +189,13 @@ public class BetterAutoSmelterBlockEntity extends AutoMachineBlockEntity {
         SingleRecipeInput all = new SingleRecipeInput(stack);
         for (RecipeHolder<AutoSmeltingRecipe> holder : matchingRecipes(ModRecipeTypes.AUTO_SMELTING.get(), all)) {
             AutoSmeltingRecipe own = holder.value();
-            addCooking(found, Kind.AUTO_SMELTING, holder.id(), own, stack, own.getIngredient().count(), own.getFuel());
+            int amount = Math.max(1, own.getIngredient().count());
+            // One choice per item it can make (each mod's steel), the one it makes by default first.
+            for (ItemStack result : own.getResultOptions(level.registryAccess())) {
+                if (!result.isEmpty()) {
+                    found.add(new Cooking(Kind.AUTO_SMELTING, holder.id(), own, amount, own.getFuel(), result));
+                }
+            }
         }
         SingleRecipeInput one = new SingleRecipeInput(stack.copyWithCount(1));
         addVanilla(found, Kind.CAMPFIRE, RecipeType.CAMPFIRE_COOKING, one);
@@ -209,6 +234,9 @@ public class BetterAutoSmelterBlockEntity extends AutoMachineBlockEntity {
     @Override
     public boolean chooseRecipe(ResourceLocation id) {
         updateCooking();
+        if (cachedChosen >= 0 && cachedCookings.get(cachedChosen).id().equals(id)) {
+            return true; // Already it: keep the item picked of its results
+        }
         for (int i = 0; i < cachedCookings.size(); i++) {
             if (cachedCookings.get(i).id().equals(id)) {
                 return chooseRecipe(i);
@@ -223,7 +251,9 @@ public class BetterAutoSmelterBlockEntity extends AutoMachineBlockEntity {
         if (index < 0 || index >= cachedCookings.size()) {
             return false;
         }
-        chosenRecipe = cachedCookings.get(index).id();
+        Cooking cooking = cachedCookings.get(index);
+        chosenRecipe = cooking.id();
+        chosenResult = resultId(cooking.result());
         onRecipeChosen();
         return true;
     }
@@ -324,7 +354,9 @@ public class BetterAutoSmelterBlockEntity extends AutoMachineBlockEntity {
         if (!cooking.recipe().matches(input, level)) {
             return null;
         }
-        ItemStack result = cooking.recipe().assemble(input, level.registryAccess());
+        ItemStack result = cooking.recipe() instanceof AutoSmeltingRecipe
+                ? cooking.result().copy() // The picked one of its results
+                : cooking.recipe().assemble(input, level.registryAccess());
         if (result.isEmpty()) {
             return null;
         }
@@ -342,6 +374,9 @@ public class BetterAutoSmelterBlockEntity extends AutoMachineBlockEntity {
         if (chosenRecipe != null) {
             tag.putString("chosen_recipe", chosenRecipe.toString());
         }
+        if (chosenResult != null) {
+            tag.putString("chosen_result", chosenResult.toString());
+        }
     }
 
     @Override
@@ -349,6 +384,7 @@ public class BetterAutoSmelterBlockEntity extends AutoMachineBlockEntity {
         super.loadAdditional(tag, registries);
         fuel.load(tag.getCompound("fuel"));
         chosenRecipe = tag.contains("chosen_recipe") ? ResourceLocation.tryParse(tag.getString("chosen_recipe")) : null;
+        chosenResult = tag.contains("chosen_result") ? ResourceLocation.tryParse(tag.getString("chosen_result")) : null;
         cookingDirty = true;
     }
 

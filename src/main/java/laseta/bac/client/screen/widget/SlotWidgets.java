@@ -4,7 +4,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.world.item.ItemStack;
 
 /** Slots drawn by the side tabs (the menu's slots in them don't draw a background of their own). */
-final class SlotWidgets {
+public final class SlotWidgets {
     public static final int SIZE = 18;
     // Vanilla slot colours
     private static final int SLOT_DARK = 0xFF373737;

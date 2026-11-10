@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Objects;
 
 import laseta.bac.item.ItemSettingUpgradeItem;
+import laseta.bac.menu.slot.HostTabSlot;
 import laseta.bac.menu.slot.MachineUpgradeSlot;
 import laseta.bac.menu.slot.ResultPreviewSlot;
 import laseta.bac.menu.slot.UpgradeSlot;
@@ -47,8 +48,12 @@ import org.jetbrains.annotations.Nullable;
  * <p>Subclasses add the slots in their constructor, in this order so slot indices never change: the template grid
  * ({@link #addTemplateSlots}), their own slots if any, the player inventory ({@link #addPlayerInventory}), then the
  * upgrades ({@link #addUpgradeSlots}).</p>
+ *
+ * <p>For a machine in a host's tab (see {@link TabHost}), the host's tabs come last, after the upgrades
+ * ({@link HostTabs}); the menu is then only valid while the host is there, and opens again on its own when its tab's
+ * machines change (see the host).</p>
  */
-public abstract class AutoMachineMenu extends AbstractContainerMenu {
+public abstract class AutoMachineMenu extends AbstractContainerMenu implements HostTabs.Holder {
     // Menu button ids (sent with vanilla's ServerboundContainerButtonClickPacket):
     // [0, 6) next mode, [6, 12) previous mode, [12, 18) reset to NONE. Offset by RelativeSide ordinal.
     // Then one id per setting action, then MachineOptions.MAX_VALUES ids per machine option (select that value), then
@@ -75,16 +80,17 @@ public abstract class AutoMachineMenu extends AbstractContainerMenu {
                             IItemHandler machineUpgrades, ContainerData sideModes, ContainerData settings,
                             MachineFeatures features, ContainerData options, ContainerData channelFaces,
                             ContainerData upgradeStatus, ContainerData status, BlockPos pos, ContainerLevelAccess access,
-                            @Nullable AutoMachineBlockEntity blockEntity) {
+                            @Nullable AutoMachineBlockEntity blockEntity, @Nullable HostTabs tabs) {
         /** Server side, backed by the block entity. */
         public static Source of(AutoMachineBlockEntity blockEntity) {
+            MachineHost host = blockEntity.getHost();
             return new Source(blockEntity.getTemplate(), blockEntity.getGridWidth(), blockEntity.getGridHeight(),
                     blockEntity.getUpgrades(), blockEntity.getMachineUpgrades(), blockEntity.getSideConfig().asContainerData(),
                     blockEntity.getSettings().asContainerData(), blockEntity.getFeatures(),
                     blockEntity.getOptions().asContainerData(), blockEntity.getChannelFaces().asContainerData(),
                     blockEntity.getUpgradeStatusData(), blockEntity.getStatusData(), blockEntity.getBlockPos(),
                     ContainerLevelAccess.create(Objects.requireNonNull(blockEntity.getLevel()), blockEntity.getBlockPos()),
-                    blockEntity);
+                    blockEntity, host == null ? null : HostTabs.of(host.getTabHost(), host.getTab(), blockEntity));
         }
 
         /**
@@ -109,12 +115,13 @@ public abstract class AutoMachineMenu extends AbstractContainerMenu {
             for (int i = 0; i < upgradeLimits.length; i++) {
                 upgradeLimits[i] = extraData.readVarInt();
             }
+            HostTabs tabs = extraData.readBoolean() ? HostTabs.read(extraData) : null;
             return new Source(new ItemStackHandler(gridWidth * gridHeight), gridWidth, gridHeight, new UpgradeInventory(() -> {
             }, type -> upgradeLimits[type.ordinal()]), new MachineUpgradeInventory(features.upgradeSlots(), () -> {
             }), new SimpleContainerData(RelativeSide.COUNT), new SimpleContainerData(MachineSettings.DATA_COUNT), features,
                     new SimpleContainerData(features.options().size()), new SimpleContainerData(features.channels().size()),
                     new SimpleContainerData(UpgradeSlotType.COUNT), new SimpleContainerData(MachineStatus.DATA_COUNT), pos,
-                    ContainerLevelAccess.NULL, null);
+                    ContainerLevelAccess.NULL, null, tabs);
         }
     }
 
@@ -139,6 +146,9 @@ public abstract class AutoMachineMenu extends AbstractContainerMenu {
     private final ContainerData upgradeStatus;
     /** Cooldown, problem and redstone signal for the status icon (see MachineStatus.DATA_*). */
     private final ContainerData status;
+    /** The host's tabs above the menu, for a machine in one of them; null for a placed machine. */
+    @Nullable
+    private final HostTabs tabs;
     /** The player the menu is open for, set with the player inventory: the server sends it the recipe choices. */
     @Nullable
     private Player player;
@@ -159,6 +169,7 @@ public abstract class AutoMachineMenu extends AbstractContainerMenu {
     private int upgradesEnd;
     private int machineUpgradesStart;
     private int machineUpgradesEnd;
+    private int tabsStart;
 
     /** @param block the machine's block: the menu closes when it is gone */
     protected AutoMachineMenu(MenuType<?> type, int containerId, Block block, MachineLayout layout, Source source) {
@@ -187,6 +198,7 @@ public abstract class AutoMachineMenu extends AbstractContainerMenu {
         this.channelFaces = source.channelFaces();
         this.upgradeStatus = source.upgradeStatus();
         this.status = source.status();
+        this.tabs = source.tabs();
         // The server has no screen: there the slots are always "visible" (it doesn't use positions anyway).
         this.upgradeSlotsVisible = blockEntity != null;
         this.machineUpgradeSlotsVisible = blockEntity != null;
@@ -225,7 +237,10 @@ public abstract class AutoMachineMenu extends AbstractContainerMenu {
         playerInventoryEnd = slots.size();
     }
 
-    /** Upgrade slots, in the upgrades tab on the left of the GUI, then the machine's own ones, in its tab. */
+    /**
+     * Upgrade slots, in the upgrades tab on the left of the GUI, then the machine's own ones, in its tab. Then, for a
+     * machine in a host's tab, the host's tabs: this must be the last slots the menu adds.
+     */
     protected void addUpgradeSlots(Source source) {
         upgradesStart = slots.size();
         for (UpgradeSlotType type : UpgradeSlotType.values()) {
@@ -240,6 +255,11 @@ public abstract class AutoMachineMenu extends AbstractContainerMenu {
                     frame.y() + 1, () -> machineUpgradeSlotsVisible));
         }
         machineUpgradesEnd = slots.size();
+        tabsStart = slots.size();
+        if (tabs != null) {
+            tabs.createSlots(layout.width()).forEach(this::addSlot);
+            addDataSlots(tabs.states());
+        }
     }
 
     protected int templateStart() {
@@ -260,7 +280,9 @@ public abstract class AutoMachineMenu extends AbstractContainerMenu {
         for (int i = templateStart; i < templateEnd; i++) {
             template.add(slots.get(i).getItem());
         }
-        return GridFillPlanner.plan(wanted, template, player.getInventory().items, fillMaximum);
+        // The template's own limit (the brewer's slots hold one item), known on the server, which does the real fill.
+        int slotLimit = templateSize() == 0 ? Integer.MAX_VALUE : slots.get(templateStart).getMaxStackSize();
+        return GridFillPlanner.plan(wanted, template, player.getInventory().items, fillMaximum, slotLimit);
     }
 
     /**
@@ -317,6 +339,11 @@ public abstract class AutoMachineMenu extends AbstractContainerMenu {
                 PacketDistributor.sendToPlayer(serverPlayer, new RecipeChoicesPayload(containerId, current));
             }
         }
+    }
+
+    @Override
+    public @Nullable HostTabs getHostTabs() {
+        return tabs;
     }
 
     /** The block entity on the server, null on the client. */
@@ -572,21 +599,35 @@ public abstract class AutoMachineMenu extends AbstractContainerMenu {
 
     @Override
     public void clicked(int slotId, int button, @NotNull ClickType clickType, @NotNull Player player) {
-        // Ignore every interaction with preview slots (pickup, swap, clone, throw, ...).
-        if (slotId >= 0 && slotId < slots.size() && slots.get(slotId) instanceof ResultPreviewSlot) {
+        // Ignore every interaction with preview slots (pickup, swap, clone, throw, ...), and with other tabs' slots:
+        // clicking those shows that tab instead (see the screen).
+        if (slotId >= 0 && slotId < slots.size() && (slots.get(slotId) instanceof ResultPreviewSlot
+                || slots.get(slotId) instanceof HostTabSlot tabSlot && !tabSlot.isCurrent())) {
             return;
         }
         super.clicked(slotId, button, clickType, player);
+        if (tabs != null) {
+            tabs.afterClick(player);
+        }
     }
 
+    /** Collecting items with a double click never takes machines out of the tabs. */
     @Override
     public boolean canTakeItemForPickAll(@NotNull ItemStack stack, @NotNull Slot slot) {
-        return !(slot instanceof ResultPreviewSlot) && super.canTakeItemForPickAll(stack, slot);
+        return !(slot instanceof ResultPreviewSlot) && !(slot instanceof HostTabSlot) && super.canTakeItemForPickAll(stack, slot);
     }
 
     @Override
     public boolean canDragTo(@NotNull Slot slot) {
-        return !(slot instanceof ResultPreviewSlot) && super.canDragTo(slot);
+        return !(slot instanceof ResultPreviewSlot) && !(slot instanceof HostTabSlot) && super.canDragTo(slot);
+    }
+
+    @Override
+    public void removed(@NotNull Player player) {
+        super.removed(player);
+        if (tabs != null) {
+            tabs.menuClosed(player);
+        }
     }
 
     @Override
@@ -605,6 +646,18 @@ public abstract class AutoMachineMenu extends AbstractContainerMenu {
                 return ItemStack.EMPTY;
             }
         } else {
+            // Player inventory -> machines into the menu's own tab first, in a host
+            if (tabs != null && HostTabs.canHold(stack)) {
+                int tabSlot = tabsStart + tabs.current();
+                if (moveItemStackTo(stack, tabSlot, tabSlot + 1, false)) {
+                    if (stack.isEmpty()) {
+                        slot.setByPlayer(ItemStack.EMPTY);
+                    } else {
+                        slot.setChanged();
+                    }
+                    return ItemStack.EMPTY;
+                }
+            }
             // Player inventory -> as many as fit into its upgrade slot if it's an upgrade (never the template, even
             // when that slot is full), otherwise -> template
             boolean upgrade = UpgradeSlotType.forStack(stack) != null;
@@ -641,6 +694,6 @@ public abstract class AutoMachineMenu extends AbstractContainerMenu {
 
     @Override
     public boolean stillValid(@NotNull Player player) {
-        return stillValid(access, player, block);
+        return tabs != null ? tabs.stillValid(player) : stillValid(access, player, block);
     }
 }

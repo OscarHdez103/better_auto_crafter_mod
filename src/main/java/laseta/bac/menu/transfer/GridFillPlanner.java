@@ -53,6 +53,15 @@ public final class GridFillPlanner {
      */
     public static Plan plan(List<List<ItemStack>> wanted, List<ItemStack> currentGrid, List<ItemStack> inventory,
                             boolean fillMaximum) {
+        return plan(wanted, currentGrid, inventory, fillMaximum, Integer.MAX_VALUE);
+    }
+
+    /**
+     * Same, for a grid whose slots hold at most {@code slotLimit} items (the brewer's hold one): filling the maximum
+     * never puts more than that in a slot.
+     */
+    public static Plan plan(List<List<ItemStack>> wanted, List<ItemStack> currentGrid, List<ItemStack> inventory,
+                            boolean fillMaximum, int slotLimit) {
         int gridSize = currentGrid.size();
         List<ItemStack> pool = new ArrayList<>();
         for (ItemStack stack : currentGrid) {
@@ -85,7 +94,7 @@ public final class GridFillPlanner {
         }
 
         if (fillMaximum && placed > 0) {
-            fillMaximum(grid, amounts, pool, inv);
+            fillMaximum(grid, amounts, pool, inv, slotLimit);
         }
 
         boolean fits = true;
@@ -105,7 +114,7 @@ public final class GridFillPlanner {
     }
 
     /** Adds one more craft's worth to every filled slot per round, while every slot can still get it. */
-    private static void fillMaximum(ItemStack[] grid, int[] amounts, List<ItemStack> pool, List<ItemStack> inv) {
+    private static void fillMaximum(ItemStack[] grid, int[] amounts, List<ItemStack> pool, List<ItemStack> inv, int slotLimit) {
         while (true) {
             ItemStack[] gridBefore = copyAll(Arrays.asList(grid)).toArray(ItemStack[]::new);
             List<ItemStack> poolBefore = copyAll(pool);
@@ -117,7 +126,7 @@ public final class GridFillPlanner {
                 if (stack.isEmpty()) {
                     continue;
                 }
-                if (stack.getCount() + amounts[i] > stack.getMaxStackSize()
+                if (stack.getCount() + amounts[i] > Math.min(stack.getMaxStackSize(), slotLimit)
                         || takeMatching(List.of(stack), amounts[i], pool, inv).isEmpty()) {
                     roundComplete = false;
                     break;

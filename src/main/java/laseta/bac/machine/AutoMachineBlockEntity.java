@@ -67,6 +67,11 @@ import org.jetbrains.annotations.Nullable;
  *
  * <p>A new machine extends this (and {@link AutoMachineBlock}, {@link AutoMachineMenu} and the client's
  * {@code AutoMachineScreen}) and implements {@link #operate}, usually as one {@link ItemTransfer#run} call.</p>
+ *
+ * <p>The same block entity also runs in a tab of a {@link TabHost} (the Better Auto Hub), not placed in the world but
+ * at the host's position, with a {@link MachineHost}: it then works through the host's block (its faces, facing and
+ * redstone signal) and runs once per machine in the tab. Machines need nothing for that, as long as they only read the
+ * world's state through this class ({@link #getFacing()}, {@link #hasSignal()}).</p>
  */
 public abstract class AutoMachineBlockEntity extends BlockEntity implements MenuProvider {
     /** Ticks the failed state stays visible after a failed attempt (redstone works in steps of 2 game ticks, so 5 redstone ticks). */
@@ -91,6 +96,13 @@ public abstract class AutoMachineBlockEntity extends BlockEntity implements Menu
     private long lastContinuousAttempt = -RedstoneMode.CONTINUOUS_INTERVAL;
     /** Game time at which the failed state is cleared again; -1 = not scheduled (not saved, see serverTick). */
     private long failedResetTime = -1;
+
+    /** Where the machine runs when it isn't a block of its own; null for a placed machine. */
+    @Nullable
+    private MachineHost host;
+    /** A hosted machine's {@link AutoMachineBlock#POWERED} and {@link AutoMachineBlock#FAILED}: it has no block state. */
+    private boolean hostedRunning;
+    private boolean hostedFailed;
 
     protected AutoMachineBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state, int gridWidth, int gridHeight) {
         this(type, pos, state, gridWidth, gridHeight, List.of());
@@ -159,7 +171,9 @@ public abstract class AutoMachineBlockEntity extends BlockEntity implements Menu
 
     /** Ticks after a successful operation before the machine may run again: its base speed, less the speed upgrades'. */
     protected int getCooldownTicks() {
-        return SpeedUpgradeItem.getOperationTicks(getBaseSpeed(), upgrades.get(UpgradeSlotType.SPEED).getCount());
+        int count = upgrades.get(UpgradeSlotType.SPEED).getCount();
+        return host == null ? SpeedUpgradeItem.getOperationTicks(getBaseSpeed(), count)
+                : SpeedUpgradeItem.getOperationTicks(getBaseSpeed(), count, host.getSpeedPercent(), host.allowsExtraSpeedUpgrades());
     }
 
     /** Called whenever the template changes, e.g. to forget something computed from it. */
@@ -226,6 +240,51 @@ public abstract class AutoMachineBlockEntity extends BlockEntity implements Menu
     }
 
     // ---------------------------------------------------------------------------------------------------------------
+    // Host
+    // ---------------------------------------------------------------------------------------------------------------
+
+    /** Makes the machine run in a host's tab (see {@link AutoMachineBlock#createHosted}), or null for none. */
+    public void setHost(@Nullable MachineHost host) {
+        this.host = host;
+    }
+
+    /** Where the machine runs when it isn't a block of its own; null for a placed machine. */
+    @Nullable
+    public MachineHost getHost() {
+        return host;
+    }
+
+    /** How many machines this one runs as: each run does that many operations. 1 unless a host holds several. */
+    public int getCopies() {
+        return host == null ? 1 : Math.max(1, host.getCopies());
+    }
+
+    /** Whether the machine's block (or its host's) receives a redstone signal. */
+    public boolean hasSignal() {
+        return host != null ? host.hasSignal() : getBlockState().getValue(AutoMachineBlock.TRIGGERED);
+    }
+
+    /** Whether the machine shows that it runs (in the cooldown after an operation). */
+    public boolean isShownRunning() {
+        return getStateFlag(AutoMachineBlock.POWERED);
+    }
+
+    /** Whether the machine shows that an operation just failed. */
+    public boolean isShownFailed() {
+        return getStateFlag(AutoMachineBlock.FAILED);
+    }
+
+    /** A placed machine saves itself with its chunk; a hosted one is saved by its host. */
+    @Override
+    public void setChanged() {
+        if (host != null) {
+            host.onMachineChanged();
+        } else {
+            super.setChanged();
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------
     // Parts
     // ---------------------------------------------------------------------------------------------------------------
 
@@ -283,7 +342,7 @@ public abstract class AutoMachineBlockEntity extends BlockEntity implements Menu
     }
 
     public Direction getFacing() {
-        return getBlockState().getValue(AutoMachineBlock.FACING);
+        return host != null ? host.getFacing() : getBlockState().getValue(AutoMachineBlock.FACING);
     }
 
     // ---------------------------------------------------------------------------------------------------------------
@@ -332,7 +391,11 @@ public abstract class AutoMachineBlockEntity extends BlockEntity implements Menu
      * they would no longer make this machine faster.
      */
     public int getUpgradeLimit(UpgradeSlotType type) {
-        return type == UpgradeSlotType.SPEED ? SpeedUpgradeItem.getUsefulCount(getBaseSpeed()) : type.getMaxStackSize();
+        if (type != UpgradeSlotType.SPEED) {
+            return type.getMaxStackSize();
+        }
+        return host == null ? SpeedUpgradeItem.getUsefulCount(getBaseSpeed())
+                : SpeedUpgradeItem.getUsefulCount(getBaseSpeed(), host.getSpeedPercent(), host.allowsExtraSpeedUpgrades());
     }
 
     /**
@@ -374,6 +437,18 @@ public abstract class AutoMachineBlockEntity extends BlockEntity implements Menu
         return null;
     }
 
+    /** Server only: the problem the GUI shows, the one that stops the machine right now if any, else the last attempt's. */
+    @Nullable
+    public MachineProblem getShownProblem() {
+        MachineProblem problem = findProblem();
+        return problem != null ? problem : status.getLastProblem();
+    }
+
+    /** Server only: what the machine is doing, as its GUI's status icon shows it. */
+    public MachineState getMachineState() {
+        return MachineState.of(settings.getRedstoneMode(), hasSignal(), isCoolingDown(), getShownProblem());
+    }
+
     /**
      * The status icon's data (see {@link MachineStatus}'s DATA_* indices) as menu data. The problem is the one that
      * stops the machine right now if there is one, otherwise the last attempt's. Computed on demand.
@@ -385,11 +460,8 @@ public abstract class AutoMachineBlockEntity extends BlockEntity implements Menu
                 return switch (index) {
                     case MachineStatus.DATA_COOLDOWN_LEFT -> level == null ? 0 : status.getCooldownLeft(level.getGameTime());
                     case MachineStatus.DATA_COOLDOWN_TOTAL -> status.getCooldownTotal();
-                    case MachineStatus.DATA_PROBLEM -> {
-                        MachineProblem problem = findProblem();
-                        yield MachineProblem.toId(problem != null ? problem : status.getLastProblem());
-                    }
-                    case MachineStatus.DATA_SIGNAL -> getBlockState().getValue(AutoMachineBlock.TRIGGERED) ? 1 : 0;
+                    case MachineStatus.DATA_PROBLEM -> MachineProblem.toId(getShownProblem());
+                    case MachineStatus.DATA_SIGNAL -> hasSignal() ? 1 : 0;
                     default -> 0;
                 };
             }
@@ -432,18 +504,26 @@ public abstract class AutoMachineBlockEntity extends BlockEntity implements Menu
 
     /** Server ticker: drives the continuous redstone modes (the rising-edge mode is handled by the block). */
     public static void serverTick(Level level, BlockState state, AutoMachineBlockEntity blockEntity) {
-        blockEntity.tickFailedState(state, level.getGameTime());
+        blockEntity.tick(level);
+    }
+
+    /**
+     * Server only, every tick: drives the continuous redstone modes and keeps the shown state up to date. Called by
+     * the block's ticker, or by the host of a hosted machine.
+     */
+    public void tick(Level level) {
+        tickFailedState(level.getGameTime());
         // Also catches a cooldown that ended or was loaded, not only the ones attemptOperation starts.
-        boolean coolingDown = blockEntity.isCoolingDown();
-        blockEntity.setStateFlag(AutoMachineBlock.POWERED, coolingDown);
-        RedstoneMode mode = blockEntity.settings.getRedstoneMode();
-        if (!mode.isContinuous() || !mode.shouldRunContinuously(state.getValue(AutoMachineBlock.TRIGGERED)) || coolingDown) {
+        boolean coolingDown = isCoolingDown();
+        setStateFlag(AutoMachineBlock.POWERED, coolingDown);
+        RedstoneMode mode = settings.getRedstoneMode();
+        if (!mode.isContinuous() || !mode.shouldRunContinuously(hasSignal()) || coolingDown) {
             return;
         }
         long now = level.getGameTime();
-        if (now - blockEntity.lastContinuousAttempt >= RedstoneMode.CONTINUOUS_INTERVAL) {
-            blockEntity.lastContinuousAttempt = now;
-            blockEntity.attemptOperation();
+        if (now - lastContinuousAttempt >= RedstoneMode.CONTINUOUS_INTERVAL) {
+            lastContinuousAttempt = now;
+            attemptOperation();
         }
     }
 
@@ -476,8 +556,8 @@ public abstract class AutoMachineBlockEntity extends BlockEntity implements Menu
     }
 
     /** Clears the failed state once its time is up. */
-    private void tickFailedState(BlockState state, long now) {
-        if (!state.getValue(AutoMachineBlock.FAILED)) {
+    private void tickFailedState(long now) {
+        if (!getStateFlag(AutoMachineBlock.FAILED)) {
             return;
         }
         if (failedResetTime < 0) {
@@ -489,17 +569,40 @@ public abstract class AutoMachineBlockEntity extends BlockEntity implements Menu
         }
     }
 
-    /** Only changes the block state (and sends it to clients) when the value actually differs. */
+    /**
+     * Only changes the block state (and sends it to clients) when the value actually differs. A hosted machine has no
+     * block state: it keeps the value itself, and tells its host.
+     */
     private void setStateFlag(BooleanProperty property, boolean value) {
+        if (host != null) {
+            if (getStateFlag(property) != value) {
+                if (property == AutoMachineBlock.FAILED) {
+                    hostedFailed = value;
+                } else {
+                    hostedRunning = value;
+                }
+                host.onMachineStateChanged();
+            }
+            return;
+        }
         BlockState state = getBlockState();
         if (level != null && state.getValue(property) != value) {
             level.setBlock(worldPosition, state.setValue(property, value), Block.UPDATE_CLIENTS);
         }
     }
 
+    /** {@link AutoMachineBlock#POWERED} or {@link AutoMachineBlock#FAILED}, from the block state or the host's copy. */
+    private boolean getStateFlag(BooleanProperty property) {
+        if (host != null) {
+            return property == AutoMachineBlock.FAILED ? hostedFailed : hostedRunning;
+        }
+        return getBlockState().getValue(property);
+    }
+
     /**
      * Resolves the faces and upgrades and lets the machine {@link #operate} with them, once plus once per coprocessing
-     * upgrade. Those repeats stop at the first one that fails, so a machine with nothing to do costs one operation.
+     * upgrade, and all of that once per machine it runs as ({@link #getCopies()}). Those repeats stop at the first one
+     * that fails, so a machine with nothing to do costs one operation.
      *
      * @return why nothing happened, or null if at least one operation did
      */
@@ -523,20 +626,33 @@ public abstract class AutoMachineBlockEntity extends BlockEntity implements Menu
         if (storageLink.status().isProblem()) {
             return MachineProblem.BROKEN_UPGRADE;
         }
-        int operations = CoprocessingUpgradeItem.getOperations(upgrades.get(UpgradeSlotType.COPROCESSING));
+        int operations = CoprocessingUpgradeItem.getOperations(upgrades.get(UpgradeSlotType.COPROCESSING)) * getCopies();
+        if (host != null) {
+            // A host that needs energy only powers as many as it has the energy for.
+            operations = host.getAffordableOperations(operations);
+            if (operations <= 0) {
+                return MachineProblem.NO_ENERGY;
+            }
+        }
         int stockLimit = getStockLimit();
-        for (int i = 0; i < operations; i++) {
+        int done = 0;
+        MachineProblem problem = null;
+        while (done < operations) {
             // A new transfer for each one: it orders the faces by the round robin, which moves on after each.
             ItemTransfer transfer = new ItemTransfer(serverLevel, worldPosition, inputs, outputs, settings,
                     stockLimit, storageLink.counter());
             if (!operate(serverLevel, transfer)) {
-                if (i > 0) {
-                    return null;
+                if (done == 0) {
+                    problem = transfer.getProblem() != null ? transfer.getProblem() : MachineProblem.CANNOT_PROCESS;
                 }
-                return transfer.getProblem() != null ? transfer.getProblem() : MachineProblem.CANNOT_PROCESS;
+                break;
             }
+            done++;
         }
-        return null;
+        if (host != null && done > 0) {
+            host.onOperations(done);
+        }
+        return problem;
     }
 
     /**
@@ -562,6 +678,23 @@ public abstract class AutoMachineBlockEntity extends BlockEntity implements Menu
     // ---------------------------------------------------------------------------------------------------------------
     // Lifecycle
     // ---------------------------------------------------------------------------------------------------------------
+
+    /**
+     * Takes everything out of the machine (its template, upgrades and own upgrades), e.g. when a host's tab no longer
+     * holds it: the caller gives it to someone, so nothing is lost.
+     */
+    public List<ItemStack> takeContents() {
+        List<ItemStack> contents = new ArrayList<>();
+        for (ItemStackHandler handler : List.of(template, upgrades, machineUpgrades)) {
+            for (int i = 0; i < handler.getSlots(); i++) {
+                if (!handler.getStackInSlot(i).isEmpty()) {
+                    contents.add(handler.getStackInSlot(i));
+                    handler.setStackInSlot(i, ItemStack.EMPTY);
+                }
+            }
+        }
+        return contents;
+    }
 
     public void dropContents() {
         if (level == null) {
@@ -651,8 +784,8 @@ public abstract class AutoMachineBlockEntity extends BlockEntity implements Menu
 
     /**
      * What the client's menu needs before its first sync, written when the menu opens: the position (the screen looks
-     * up the block's facing and face textures), the grid's size and the upgrade slots' limits (which the config can
-     * change, on the server).
+     * up the block's facing and face textures), the grid's size, the upgrade slots' limits (which the config can
+     * change, on the server) and, in a host's tab, its tabs.
      */
     public void writeMenuData(RegistryFriendlyByteBuf buffer) {
         buffer.writeBlockPos(worldPosition);
@@ -660,6 +793,10 @@ public abstract class AutoMachineBlockEntity extends BlockEntity implements Menu
         buffer.writeVarInt(gridHeight);
         for (UpgradeSlotType type : UpgradeSlotType.values()) {
             buffer.writeVarInt(getUpgradeLimit(type));
+        }
+        buffer.writeBoolean(host != null);
+        if (host != null) {
+            HostTabs.write(buffer, host.getTabHost(), host.getTab());
         }
     }
 

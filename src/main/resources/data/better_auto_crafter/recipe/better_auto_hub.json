@@ -1,0 +1,25 @@
+{
+  "type": "better_auto_crafter:auto_crafting",
+  "pattern": [
+    "CLC",
+    "LNL",
+    "CLC"
+  ],
+  "key": {
+    "C": {
+      "item": "better_auto_crafter:coprocessing_upgrade",
+      "count": 4
+    },
+    "L": {
+      "item": "better_auto_crafter:colored_led",
+      "count": 10
+    },
+    "N": {
+      "item": "minecraft:nether_star"
+    }
+  },
+  "result": {
+    "id": "better_auto_crafter:better_auto_hub",
+    "count": 1
+  }
+}

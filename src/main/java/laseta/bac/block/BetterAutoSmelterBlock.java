@@ -28,12 +28,12 @@ public class BetterAutoSmelterBlock extends AutoMachineBlock {
     }
 
     @Override
-    protected int getSuccessSound() {
+    public int getSuccessSound() {
         return LevelEvent.SOUND_DISPENSER_DISPENSE;
     }
 
     @Override
-    protected int getFailSound() {
+    public int getFailSound() {
         return LevelEvent.SOUND_DISPENSER_FAIL;
     }
 

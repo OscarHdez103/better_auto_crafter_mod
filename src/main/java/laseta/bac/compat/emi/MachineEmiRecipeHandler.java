@@ -3,6 +3,7 @@ package laseta.bac.compat.emi;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Function;
 
 import dev.emi.emi.api.recipe.EmiPlayerInventory;
 import dev.emi.emi.api.recipe.EmiRecipe;
@@ -16,6 +17,7 @@ import dev.emi.emi.api.widget.SlotWidget;
 import dev.emi.emi.api.widget.Widget;
 import laseta.bac.compat.RecipeFillHelper;
 import laseta.bac.machine.AutoMachineMenu;
+import laseta.bac.menu.slot.HostTabSlot;
 import laseta.bac.menu.slot.ResultPreviewSlot;
 import laseta.bac.menu.slot.UpgradeSlot;
 import laseta.bac.menu.transfer.GridFillPlanner;
@@ -30,7 +32,8 @@ import net.minecraft.world.item.ItemStack;
 
 /**
  * EMI fill button that fills a machine's template with a recipe's inputs, in order: the crafter's grid with crafting
- * and auto crafting recipes, the smelter's input with any cooking recipe. Places whatever ingredients the player has, as
+ * and auto crafting recipes, the smelter's input with any cooking recipe, the brewer's row with its own recipes'
+ * ingredients (not the starter, which comes from the starter faces). Places whatever ingredients the player has, as
  * many as one operation takes; slots it can't fill are highlighted in red but the button still works. It is only
  * disabled when nothing at all can be placed. The machine then makes that very recipe, if its template makes several.
  */
@@ -40,22 +43,37 @@ public class MachineEmiRecipeHandler<M extends AutoMachineMenu> implements EmiRe
 
     private final Set<EmiRecipeCategory> categories;
     private final int templateSize;
+    /** A recipe's inputs that go into the template, in its slot order (all of them, but the brewer's starter). */
+    private final Function<EmiRecipe, List<EmiIngredient>> templateInputs;
 
     /**
      * @param categories   categories whose recipes list their inputs in the template's slot order
      * @param templateSize the machine's template slots
      */
     public MachineEmiRecipeHandler(Set<EmiRecipeCategory> categories, int templateSize) {
+        this(categories, templateSize, EmiRecipe::getInputs);
+    }
+
+    /**
+     * @param categories     the categories filled in
+     * @param templateSize   the machine's template slots
+     * @param templateInputs a recipe's inputs that go into the template, in its slot order
+     */
+    public MachineEmiRecipeHandler(Set<EmiRecipeCategory> categories, int templateSize,
+                                   Function<EmiRecipe, List<EmiIngredient>> templateInputs) {
         this.categories = Set.copyOf(categories);
         this.templateSize = templateSize;
+        this.templateInputs = templateInputs;
     }
 
     @Override
     public EmiPlayerInventory getInventory(AbstractContainerScreen<M> screen) {
-        // Everything the template can be filled from: the template itself and the player's inventory.
+        // Everything the template can be filled from: the template itself and the player's inventory (not the machines
+        // in a host's tabs).
         List<EmiStack> stacks = new ArrayList<>();
         for (Slot slot : screen.getMenu().slots) {
-            if (!(slot instanceof ResultPreviewSlot) && !(slot instanceof UpgradeSlot) && slot.hasItem()) {
+            if (!(slot instanceof ResultPreviewSlot) && !(slot instanceof UpgradeSlot) && !(slot instanceof HostTabSlot)
+                    && slot.hasItem()) {
                 stacks.add(EmiStack.of(slot.getItem()));
             }
         }
@@ -64,7 +82,7 @@ public class MachineEmiRecipeHandler<M extends AutoMachineMenu> implements EmiRe
 
     @Override
     public boolean supportsRecipe(EmiRecipe recipe) {
-        return categories.contains(recipe.getCategory()) && recipe.getInputs().size() <= templateSize;
+        return categories.contains(recipe.getCategory()) && templateInputs.apply(recipe).size() <= templateSize;
     }
 
     @Override
@@ -104,7 +122,7 @@ public class MachineEmiRecipeHandler<M extends AutoMachineMenu> implements EmiRe
     @Override
     public void render(EmiRecipe recipe, EmiCraftContext<M> context, List<Widget> widgets, GuiGraphics graphics) {
         boolean[] missing = plan(recipe, context).missing();
-        List<EmiIngredient> inputs = recipe.getInputs();
+        List<EmiIngredient> inputs = templateInputs.apply(recipe);
         for (Widget widget : widgets) {
             if (widget instanceof SlotWidget slotWidget) {
                 int index = indexOfSame(inputs, slotWidget.getStack());
@@ -127,8 +145,8 @@ public class MachineEmiRecipeHandler<M extends AutoMachineMenu> implements EmiRe
      * EMI crafting recipes list their inputs in 3x3 grid order (shaped recipes are padded with empty slots), and so do
      * auto crafting recipes; cooking recipes have a single input.
      */
-    private static List<List<ItemStack>> wanted(EmiRecipe recipe) {
-        return recipe.getInputs().stream()
+    private List<List<ItemStack>> wanted(EmiRecipe recipe) {
+        return templateInputs.apply(recipe).stream()
                 // The ingredient holds the amount, its stacks may not: one craft takes that many.
                 .map(ingredient -> RecipeFillHelper.candidates(ingredient.getEmiStacks().stream()
                         .map(stack -> stack.getItemStack().copyWithCount((int) Math.max(1, ingredient.getAmount())))))
